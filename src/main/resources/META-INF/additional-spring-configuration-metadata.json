@@ -1,0 +1,8 @@
+{
+  "properties": [
+    {
+      "name": "intercom.port",
+      "type": "java.lang.Integer",
+      "description": "Intercom tcp socket port."
+  }
+] }
