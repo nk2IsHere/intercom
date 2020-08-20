@@ -1,0 +1,3 @@
+package eu.nk2.intercom
+
+const val TEST_INTERFACE_INTERCOM_ID = "TEST_INTERFACE_INTERCOM_ID"

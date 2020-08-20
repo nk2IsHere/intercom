@@ -1,8 +1,19 @@
 {
   "properties": [
     {
+      "name": "intercom.serverModel",
+      "type": "java.lang.Boolean",
+      "description": "Intercom mode."
+    },
+    {
+      "name": "intercom.host",
+      "type": "java.lang.String",
+      "description": "Intercom tcp socket host (applicable to client instances)."
+    },
+    {
       "name": "intercom.port",
       "type": "java.lang.Integer",
       "description": "Intercom tcp socket port."
-  }
-] }
+    },
+  ]
+}

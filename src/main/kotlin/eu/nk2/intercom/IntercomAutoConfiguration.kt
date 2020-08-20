@@ -16,7 +16,10 @@ class IntercomAutoConfiguration {
     @Bean fun intercomAutoStarterApplicationListener(): IntercomAutoStarterApplicationListener =
         IntercomAutoStarterApplicationListener()
 
-    @Bean fun intercomTcpServer(
+
+    @Bean
+    @ConditionalOnProperty(prefix = "intercom", name = ["serverMode"], havingValue = "true", matchIfMissing = true)
+    fun intercomTcpServer(
         @Autowired properties: IntercomPropertiesConfiguration
     ): AbstractTcpServer =
         TcpServer(
