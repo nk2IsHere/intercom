@@ -1,10 +1,12 @@
 package eu.nk2.intercom
 
 import eu.nk2.intercom.api.ProvideIntercom
+import eu.nk2.intercom.application.IntercomApplication
+import eu.nk2.intercom.application.TestInterface
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 
-@SpringBootTest
+@SpringBootTest(classes = [IntercomApplication::class])
 class IntercomTests {
 
     @ProvideIntercom(id = TEST_INTERFACE_INTERCOM_ID)

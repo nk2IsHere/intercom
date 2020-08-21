@@ -56,7 +56,7 @@ import java.util.*
         listeners.add(listener)
     }
 
-    override fun onMessageReceived(connection: AbstractTcpConnection, message: Any) {
+    override fun onMessageReceived(connection: AbstractTcpConnection, message: ByteArray) {
         logger.trace("Received new message from " + connection.address.canonicalHostName)
         logger.trace("Class name: " + message.javaClass.canonicalName + ", toString: " + message.toString())
         for (listener in listeners) {

@@ -1,4 +1,4 @@
-package eu.nk2.intercom
+package eu.nk2.intercom.boot
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 

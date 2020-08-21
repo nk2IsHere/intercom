@@ -9,9 +9,7 @@ import java.net.InetAddress
 import java.net.Socket
 import java.util.*
 
-class TcpConnection(
-    private val socket: Socket
-): AbstractTcpConnection {
+class TcpConnection(private val socket: Socket): AbstractTcpConnection {
 
     private var inputStream: InputStream? = null
     private var outputStream: OutputStream? = null

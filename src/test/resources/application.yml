@@ -1,2 +1,4 @@
 intercom:
+  serverMode: true
+  host: localhost
   port: 1000

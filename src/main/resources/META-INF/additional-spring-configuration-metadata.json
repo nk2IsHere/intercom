@@ -1,7 +1,7 @@
 {
   "properties": [
     {
-      "name": "intercom.serverModel",
+      "name": "intercom.serverMode",
       "type": "java.lang.Boolean",
       "description": "Intercom mode."
     },

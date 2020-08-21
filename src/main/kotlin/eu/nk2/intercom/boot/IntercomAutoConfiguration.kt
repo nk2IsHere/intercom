@@ -1,4 +1,4 @@
-package eu.nk2.intercom
+package eu.nk2.intercom.boot
 
 import eu.nk2.intercom.tcp.TcpServer
 import eu.nk2.intercom.tcp.api.AbstractTcpServer
@@ -10,12 +10,11 @@ import org.springframework.context.annotation.Configuration
 
 @Configuration
 @EnableConfigurationProperties(IntercomPropertiesConfiguration::class)
-@ConditionalOnProperty(prefix = "intercom", name = ["port"])
+@ConditionalOnProperty(prefix = "intercom", name = ["serverMode", "host", "port"])
 class IntercomAutoConfiguration {
 
     @Bean fun intercomAutoStarterApplicationListener(): IntercomAutoStarterApplicationListener =
         IntercomAutoStarterApplicationListener()
-
 
     @Bean
     @ConditionalOnProperty(prefix = "intercom", name = ["serverMode"], havingValue = "true", matchIfMissing = true)
@@ -24,5 +23,14 @@ class IntercomAutoConfiguration {
     ): AbstractTcpServer =
         TcpServer(
             port = properties.port ?: error("Intercom requires TCP port to be present in configuration")
+        )
+
+    @Bean
+    @ConditionalOnProperty(prefix = "intercom", name = ["serverMode"], havingValue = "true", matchIfMissing = true)
+    fun intercomProviderBeanPostProcessor(
+        @Autowired tcpServer: AbstractTcpServer
+    ): IntercomProviderBeanPostProcessor =
+        IntercomProviderBeanPostProcessor(
+            tcpServer = tcpServer
         )
 }

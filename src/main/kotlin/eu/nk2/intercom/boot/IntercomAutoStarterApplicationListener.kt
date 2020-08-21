@@ -1,6 +1,5 @@
-package eu.nk2.intercom
+package eu.nk2.intercom.boot
 
-import eu.nk2.intercom.IntercomPropertiesConfiguration
 import eu.nk2.intercom.tcp.api.AbstractTcpServer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.ApplicationListener
