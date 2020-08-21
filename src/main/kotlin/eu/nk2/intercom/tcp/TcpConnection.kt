@@ -52,7 +52,7 @@ class TcpConnection(private val socket: Socket): AbstractTcpConnection {
                         break
                     }
                 } catch (e: IOException) {
-                    e.printStackTrace()
+//                    e.printStackTrace()
                     for (listener in listeners) {
                         listener.onDisconnected(this)
                     }

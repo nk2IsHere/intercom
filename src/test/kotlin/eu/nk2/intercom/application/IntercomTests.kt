@@ -7,7 +7,7 @@ import org.springframework.boot.test.context.SpringBootTest
 @SpringBootTest(classes = [IntercomApplication::class])
 class IntercomTests {
 
-    @ProvideIntercom(id = TEST_INTERFACE_INTERCOM_ID)
+    @field:ProvideIntercom(id = TEST_INTERFACE_INTERCOM_ID)
     private lateinit var testInterface: TestInterface
 
     @Test

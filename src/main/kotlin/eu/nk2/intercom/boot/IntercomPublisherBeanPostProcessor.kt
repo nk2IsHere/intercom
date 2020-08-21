@@ -115,7 +115,7 @@ import java.util.concurrent.ConcurrentHashMap
                 ?: error("id is required in annotation @PublishIntercom")
 
             intercomPublishers[id.hashCode()] = bean to beanClass.methods.map { it.name.hashCode() to it }.toMap()
-            logger.debug("Mapped $id to registry")
+            logger.debug("Mapped publisher $id to registry")
         }
 
         return super.postProcessAfterInitialization(bean, beanName)

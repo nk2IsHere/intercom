@@ -1,6 +1,6 @@
 package eu.nk2.intercom.api
 
-@Target(AnnotationTarget.PROPERTY)
+@Target(AnnotationTarget.FIELD)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class ProvideIntercom(
     val id: String
