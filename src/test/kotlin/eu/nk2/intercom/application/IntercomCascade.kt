@@ -1,6 +1,5 @@
 package eu.nk2.intercom.application
 
-import eu.nk2.intercom.TEST_INTERFACE_INTERCOM_ID
 import eu.nk2.intercom.api.PublishIntercom
 import org.springframework.stereotype.Component
 

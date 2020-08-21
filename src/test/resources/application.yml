@@ -1,6 +1,6 @@
 logging:
   level:
-    ROOT: debug
+    eu.nk2.intercom: debug
 
 intercom:
   serverMode: true
