@@ -11,8 +11,18 @@ class IntercomTests {
     private lateinit var testInterface: TestInterface
 
     @Test
-    fun intercomBlockingCommunication() {
+    fun intercomMethodWorks() {
         assert(testInterface.testA(1, 2) == "3") { "TestInterfaceImpl must return valid answer" }
+    }
+
+    @Test
+    fun intercomOverloadedMethodWorks() {
+        assert(testInterface.testA(5) == "10") { "TestInterfaceImpl must return valid answer" }
+    }
+
+    @Test
+    fun intercomAnotherMethodWorks() {
+        assert(testInterface.testB(4, "hello") == "hello4") { "TestInterfaceImpl must return valid answer" }
     }
 
 }
