@@ -13,14 +13,8 @@ import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.AnnotationUtils
 import org.springframework.stereotype.Component
 import org.springframework.util.SerializationUtils
-import java.io.ByteArrayOutputStream
-import java.io.IOException
-import java.io.ObjectOutputStream
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
-import java.math.BigInteger
-import java.security.MessageDigest
-import java.security.NoSuchAlgorithmException
 import java.util.concurrent.ConcurrentHashMap
 
 
@@ -39,11 +33,11 @@ import java.util.concurrent.ConcurrentHashMap
     @EventListener fun init(event: ContextRefreshedEvent) {
         tcpServer.addListener(object : TcpConnectionListener {
             override fun onConnected(connection: AbstractTcpConnection) {
-                logger.trace("Connected intercom client: ${connection.address.canonicalHostName}")
+                logger.debug("Connected intercom client: ${connection.address.canonicalHostName}")
             }
 
             override fun onDisconnected(connection: AbstractTcpConnection) {
-                logger.trace("Disconnected intercom client: ${connection.address.canonicalHostName}")
+                logger.debug("Disconnected intercom client: ${connection.address.canonicalHostName}")
             }
 
             override fun onMessageReceived(connection: AbstractTcpConnection, message: ByteArray) {
@@ -54,7 +48,7 @@ import java.util.concurrent.ConcurrentHashMap
                             data = null
                         ))
 
-                    logger.trace("Connected intercom client: ${connection.address.canonicalHostName}: ${bundle.publisherId}.${bundle.methodId}()")
+                    logger.debug("Connected intercom client: ${connection.address.canonicalHostName}: ${bundle.publisherId}.${bundle.methodId}()")
                     val publisherDefinition = intercomPublishers[bundle.publisherId]
                         ?: return connection.sendBundle(IntercomReturnBundle(
                             error = IntercomReturnBundle.IntercomError.BAD_PUBLISHER,
@@ -87,7 +81,7 @@ import java.util.concurrent.ConcurrentHashMap
                         data = output
                     ))
                 } catch (e: Exception) {
-                    logger.trace("Error in handling intercom client", e)
+                    logger.debug("Error in handling intercom client", e)
                     return connection.sendBundle(IntercomReturnBundle(
                         error = when (e) {
                             is IllegalArgumentException -> IntercomReturnBundle.IntercomError.BAD_DATA
@@ -104,7 +98,7 @@ import java.util.concurrent.ConcurrentHashMap
 
     override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any? =
         bean.apply {
-            if (bean.javaClass.isAnnotationPresent(PublishIntercom::class.java)) {
+            if (AnnotationUtils.getAnnotation(bean.javaClass, PublishIntercom::class.java) != null) {
                 if(bean.javaClass.constructors.none { it.parameters.isEmpty() })
                     error("Classes that contain methods annotated with @PublishIntercom must contain empty constructor, " +
                         "please look at the implementation of ${bean.javaClass.name}")
@@ -119,7 +113,7 @@ import java.util.concurrent.ConcurrentHashMap
                 ?: error("id is required in annotation @PublishIntercom")
 
             intercomPublishers[id.hashCode()] = bean to beanClass.methods.map { it.name.hashCode() to it }.toMap()
-            logger.trace("Mapped $id to registry")
+            logger.debug("Mapped $id to registry")
         }
 
         return super.postProcessAfterInitialization(bean, beanName)
