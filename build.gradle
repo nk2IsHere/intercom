@@ -63,3 +63,7 @@ compileTestKotlin {
         jvmTarget = '1.8'
     }
 }
+
+noArg {
+    annotation("eu.nk2.intercom.boot.NoArg")
+}

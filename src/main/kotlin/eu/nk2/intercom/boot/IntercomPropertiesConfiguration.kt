@@ -1,10 +1,15 @@
 package eu.nk2.intercom.boot
 
 import org.springframework.boot.context.properties.ConfigurationProperties
+import org.springframework.boot.context.properties.ConstructorBinding
+import org.springframework.stereotype.Component
 
+@NoArg
+@ConstructorBinding
+@Component
 @ConfigurationProperties(prefix = "intercom")
-class IntercomPropertiesConfiguration {
-    var serverMode: Boolean? = null
-    var host: String? = null
-    var port: Int? = null
-}
+data class IntercomPropertiesConfiguration(
+    val serverMode: Boolean?,
+    val host: String?,
+    val port: Int?
+)
