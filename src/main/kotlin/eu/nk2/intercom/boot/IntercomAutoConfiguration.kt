@@ -22,15 +22,24 @@ class IntercomAutoConfiguration {
         @Autowired properties: IntercomPropertiesConfiguration
     ): AbstractTcpServer =
         TcpServer(
-            port = properties.port ?: error("Intercom requires TCP port to be present in configuration")
+            port = properties.port ?: error("Intercom requires server port to be present in configuration")
         )
 
     @Bean
     @ConditionalOnProperty(prefix = "intercom", name = ["serverMode"], havingValue = "true", matchIfMissing = true)
-    fun intercomProviderBeanPostProcessor(
+    fun intercomPublisherBeanPostProcessor(
         @Autowired tcpServer: AbstractTcpServer
+    ): IntercomPublisherBeanPostProcessor =
+        IntercomPublisherBeanPostProcessor(
+            tcpServer = tcpServer
+        )
+
+    @Bean
+    fun intercomProviderBeanPostProcessor(
+        @Autowired properties: IntercomPropertiesConfiguration
     ): IntercomProviderBeanPostProcessor =
         IntercomProviderBeanPostProcessor(
-            tcpServer = tcpServer
+            host = properties.host ?: error("Intercom requires client host to be present in configuration"),
+            port = properties.port ?: error("Intercom requires client port to be present in configuration")
         )
 }

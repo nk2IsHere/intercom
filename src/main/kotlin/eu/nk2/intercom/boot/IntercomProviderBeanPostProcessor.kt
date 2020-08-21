@@ -1,121 +1,74 @@
 package eu.nk2.intercom.boot
 
+import eu.nk2.intercom.IntercomError
+import eu.nk2.intercom.IntercomException
 import eu.nk2.intercom.IntercomMethodBundle
 import eu.nk2.intercom.IntercomReturnBundle
-import eu.nk2.intercom.api.PublishIntercom
-import eu.nk2.intercom.tcp.api.AbstractTcpConnection
-import eu.nk2.intercom.tcp.api.AbstractTcpServer
-import eu.nk2.intercom.tcp.api.TcpConnectionListener
+import eu.nk2.intercom.api.ProvideIntercom
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.config.BeanPostProcessor
-import org.springframework.context.event.ContextRefreshedEvent
-import org.springframework.context.event.EventListener
-import org.springframework.core.annotation.AnnotationUtils
 import org.springframework.stereotype.Component
+import org.springframework.util.ReflectionUtils
 import org.springframework.util.SerializationUtils
-import java.lang.reflect.InvocationTargetException
-import java.lang.reflect.Method
-import java.util.concurrent.ConcurrentHashMap
+import java.lang.reflect.Proxy
+import java.net.Socket
 
-
-@Component class IntercomProviderBeanPostProcessor(
-    private val tcpServer: AbstractTcpServer
+@Component
+class IntercomProviderBeanPostProcessor(
+    private val host: String,
+    private val port: Int
 ): BeanPostProcessor {
     private val logger = LoggerFactory.getLogger(IntercomProviderBeanPostProcessor::class.java)
 
-    private val intercomPublisherAwareBeans = hashMapOf<String, Class<*>>()
-    private val intercomPublishers: MutableMap<Int, Pair<Any, Map<Int, Method>>> = ConcurrentHashMap()
-
-    private fun <T> AbstractTcpConnection.sendBundle(intercomReturnBundle: IntercomReturnBundle<T>): Unit =
-        this.send(SerializationUtils.serialize(intercomReturnBundle)!!)
-            .also { this.close() }
-
-    @EventListener fun init(event: ContextRefreshedEvent) {
-        tcpServer.addListener(object : TcpConnectionListener {
-            override fun onConnected(connection: AbstractTcpConnection) {
-                logger.debug("Connected intercom client: ${connection.address.canonicalHostName}")
-            }
-
-            override fun onDisconnected(connection: AbstractTcpConnection) {
-                logger.debug("Disconnected intercom client: ${connection.address.canonicalHostName}")
-            }
-
-            override fun onMessageReceived(connection: AbstractTcpConnection, message: ByteArray) {
-                try {
-                    val bundle = SerializationUtils.deserialize(message) as? IntercomMethodBundle
-                        ?: return connection.sendBundle(IntercomReturnBundle(
-                            error = IntercomReturnBundle.IntercomError.NO_DATA,
-                            data = null
-                        ))
-
-                    logger.debug("Connected intercom client: ${connection.address.canonicalHostName}: ${bundle.publisherId}.${bundle.methodId}()")
-                    val publisherDefinition = intercomPublishers[bundle.publisherId]
-                        ?: return connection.sendBundle(IntercomReturnBundle(
-                            error = IntercomReturnBundle.IntercomError.BAD_PUBLISHER,
-                            data = null
-                        ))
-
-                    val (publisher, method) = publisherDefinition.first to (
-                        publisherDefinition.second[bundle.methodId]
-                            ?: return connection.sendBundle(IntercomReturnBundle(
-                                error = IntercomReturnBundle.IntercomError.BAD_METHOD,
-                                data = null
-                            ))
-                        )
-
-                    if(method.parameterCount != bundle.parameters.size)
-                        return connection.sendBundle(IntercomReturnBundle(
-                            error = IntercomReturnBundle.IntercomError.BAD_PARAMS,
-                            data = null
-                        ))
-                    for((index, parameter) in method.parameters.withIndex())
-                        if(parameter.type != bundle.parameters[index].javaClass)
-                            return connection.sendBundle(IntercomReturnBundle(
-                                error = IntercomReturnBundle.IntercomError.BAD_PARAMS,
-                                data = null
-                            ))
-
-                    val output = method.invoke(publisher, *bundle.parameters)
-                    return connection.sendBundle(IntercomReturnBundle(
-                        error = null,
-                        data = output
-                    ))
-                } catch (e: Exception) {
-                    logger.debug("Error in handling intercom client", e)
-                    return connection.sendBundle(IntercomReturnBundle(
-                        error = when (e) {
-                            is IllegalArgumentException -> IntercomReturnBundle.IntercomError.BAD_DATA
-                            is InvocationTargetException -> IntercomReturnBundle.IntercomError.PROVIDER_ERROR
-                            else -> IntercomReturnBundle.IntercomError.INTERNAL_ERROR
-                        },
-                        data = null
-                    ))
-                }
-            }
-
-        })
+    fun error(msg: String, error: IntercomError) {
+        throw IntercomException(msg, error)
     }
 
-    override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any? =
-        bean.apply {
-            if (AnnotationUtils.getAnnotation(bean.javaClass, PublishIntercom::class.java) != null) {
-                if(bean.javaClass.constructors.none { it.parameters.isEmpty() })
-                    error("Classes that contain methods annotated with @PublishIntercom must contain empty constructor, " +
-                        "please look at the implementation of ${bean.javaClass.name}")
+    override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any? {
+        return bean.apply {
+            ReflectionUtils.doWithFields(
+                bean.javaClass,
+                { field ->
+                    logger.debug("Mapping $beanName's field to proxy")
+                    val id = field.getAnnotation(ProvideIntercom::class.java)?.id
+                        ?: error("id is required in annotation @PublishIntercom")
 
-                intercomPublisherAwareBeans[beanName] = this.javaClass
-            }
+                    field.set(bean, Proxy.newProxyInstance(bean.javaClass.classLoader, arrayOf(bean.javaClass)) { _, method, args ->
+                        val bundle = IntercomMethodBundle(
+                            publisherId = id.hashCode(),
+                            methodId = method.name.hashCode(),
+                            parameters = args
+                        )
+
+                        val socket = Socket(host, port)
+                        socket.getOutputStream().write(SerializationUtils.serialize(bundle)!!)
+
+                        val data = SerializationUtils.deserialize(socket.getInputStream().readAllBytes())
+                            as? IntercomReturnBundle<Any>
+                            ?: error("Received unexpected data type")
+
+                        if(data.error != null)
+                            when(data.error) {
+                                IntercomError.NO_DATA -> error("Server received no data", data.error)
+                                IntercomError.BAD_DATA -> error("Server received bad data", data.error)
+                                IntercomError.BAD_PUBLISHER -> error("Server received bad publisher - it cannot be found", data.error)
+                                IntercomError.BAD_METHOD -> error("Server received bad method - it cannot be found", data.error)
+                                IntercomError.BAD_PARAMS -> error("Server received bad parameters - args count or types mismatch", data.error)
+                                IntercomError.PROVIDER_ERROR -> error("Server produced provider error - check logs", data.error)
+                                IntercomError.INTERNAL_ERROR -> error("Server received internal error - check logs and mentally punch the author", data.error)
+                            }
+
+                        data.data
+                    })
+                },
+                { field ->
+                    field.isAnnotationPresent(ProvideIntercom::class.java)
+                }
+            )
         }
+    }
 
     override fun postProcessAfterInitialization(bean: Any, beanName: String): Any? {
-        intercomPublisherAwareBeans[beanName]?.let { beanClass ->
-            val id = AnnotationUtils.getAnnotation(beanClass, PublishIntercom::class.java)?.id
-                ?: error("id is required in annotation @PublishIntercom")
-
-            intercomPublishers[id.hashCode()] = bean to beanClass.methods.map { it.name.hashCode() to it }.toMap()
-            logger.debug("Mapped $id to registry")
-        }
-
         return super.postProcessAfterInitialization(bean, beanName)
     }
 }
