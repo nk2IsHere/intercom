@@ -1,5 +1,6 @@
 package eu.nk2.intercom.boot
 
+import eu.nk2.intercom.ClassUtils
 import eu.nk2.intercom.IntercomError
 import eu.nk2.intercom.IntercomMethodBundle
 import eu.nk2.intercom.IntercomReturnBundle
@@ -72,7 +73,7 @@ import java.util.concurrent.ConcurrentHashMap
                             data = null
                         ))
                     for((index, parameter) in method.parameters.withIndex())
-                        if(parameter.type != bundle.parameters[index].javaClass)
+                        if (ClassUtils.objectiveClass(parameter.type) != bundle.parameters[index].javaClass)
                             return connection.sendBundle(IntercomReturnBundle(
                                 error = IntercomError.BAD_PARAMS,
                                 data = null
