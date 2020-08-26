@@ -31,7 +31,7 @@ class IntercomProviderBeanPostProcessor(
         val id = field.getAnnotation(ProvideIntercom::class.java)?.id
             ?: error("id is required in annotation @ProvideIntercom")
 
-        ReflectionUtils.makeAccessible(field);
+        ReflectionUtils.makeAccessible(field)
         field.set(bean, Proxy.newProxyInstance(bean.javaClass.classLoader, arrayOf(field.type)) { _, method, args ->
             val bundle = IntercomMethodBundle(
                 publisherId = id.hashCode(),
@@ -42,9 +42,10 @@ class IntercomProviderBeanPostProcessor(
             val socket = Socket(host, port)
             socket.getOutputStream().write(SerializationUtils.serialize(bundle)!!)
 
-            val data = SerializationUtils.deserialize(socket.getInputStream().readAllBytes())
-                as? IntercomReturnBundle<Any>
+            val data = SerializationUtils.deserialize(socket.getInputStream().readBytes()) as? IntercomReturnBundle<Any>
                 ?: error("Received unexpected data type")
+
+            socket.close()
 
             if(data.error != null)
                 when(data.error) {

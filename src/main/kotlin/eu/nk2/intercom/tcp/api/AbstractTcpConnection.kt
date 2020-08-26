@@ -7,6 +7,6 @@ interface AbstractTcpConnection {
 
     fun start()
     fun close()
-    fun send(message: Any)
+    fun send(message: ByteArray)
     fun addListener(listener: TcpConnectionListener)
 }

@@ -7,12 +7,14 @@ import org.springframework.boot.test.context.SpringBootTest
 @SpringBootTest(classes = [IntercomApplication::class])
 class IntercomTests {
 
-    @field:ProvideIntercom(id = TEST_INTERFACE_INTERCOM_ID)
+    @ProvideIntercom(id = TEST_INTERFACE_INTERCOM_ID)
     private lateinit var testInterface: TestInterface
 
     @Test
     fun intercomMethodWorks() {
-        assert(testInterface.testA(1, 2) == "3") { "TestInterfaceImpl must return valid answer" }
+        (1..TEST_BENCHMARK_REPEAT_COUNT).forEach {
+            assert(testInterface.testA(1, 2) == "3") { "TestInterfaceImpl must return valid answer" }
+        }
     }
 
     @Test
@@ -25,4 +27,13 @@ class IntercomTests {
         assert(testInterface.testB(4, "hello") == "hello4") { "TestInterfaceImpl must return valid answer" }
     }
 
+    @Test
+    fun intercomOverloadedMethodDifferentTypeWorks() {
+        assert(testInterface.testA("5") == "55") { "TestInterfaceImpl must return valid answer" }
+    }
+
+    @Test
+    fun intercomAnotherMethodOverloadedDifferentTypeWorks() {
+        assert(testInterface.testB("aaa", 4) == "4aaa") { "TestInterfaceImpl must return valid answer" }
+    }
 }
