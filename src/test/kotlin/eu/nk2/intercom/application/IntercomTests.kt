@@ -16,10 +16,10 @@ class IntercomTests {
     @ProvideIntercom(id = TEST_SECOND_INTERFACE_INTERCOM_ID)
     private lateinit var secondTestInterface: TestInterface
 
-    @ProvideIntercom(id = TEST_INTERFACE_INTERCOM_ID)
+    @ProvideIntercom(id = TEST_DELAYED_INTERFACE_INTERCOM_ID)
     private lateinit var testDelayedInterface: TestDelayedInterface
 
-    @ProvideIntercom(id = TEST_SECOND_INTERFACE_INTERCOM_ID)
+    @ProvideIntercom(id = TEST_SECOND_DELAYED_INTERFACE_INTERCOM_ID)
     private lateinit var secondTestDelayedInterface: TestDelayedInterface
 
     @Test
@@ -70,7 +70,7 @@ class IntercomTests {
         fun makeTestSecondDelayedInterfaceThread() =
             Thread {
                 (1..TEST_DELAYED_BENCHMARK_REPEAT_COUNT).forEach {
-                    assert(secondTestDelayedInterface.test(TEST_DELAYED_BENCHMARK_SECOND_DELAY_MS) == 1) { "TestSecondDelayedInterfaceImpl must return valid answer" }
+                    assert(secondTestDelayedInterface.test(TEST_DELAYED_BENCHMARK_SECOND_DELAY_MS) == 2) { "TestSecondDelayedInterfaceImpl must return valid answer" }
                 }
             }
 
