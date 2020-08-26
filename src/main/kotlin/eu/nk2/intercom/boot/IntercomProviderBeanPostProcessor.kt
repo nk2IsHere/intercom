@@ -35,7 +35,7 @@ class IntercomProviderBeanPostProcessor(
         field.set(bean, Proxy.newProxyInstance(bean.javaClass.classLoader, arrayOf(field.type)) { _, method, args ->
             val bundle = IntercomMethodBundle(
                 publisherId = id.hashCode(),
-                methodId = method.name.hashCode() xor method.parameters.map { it.type.packageName }.hashCode(),
+                methodId = method.name.hashCode() xor method.parameters.map { it.type.name }.hashCode(),
                 parameters = args
             )
 

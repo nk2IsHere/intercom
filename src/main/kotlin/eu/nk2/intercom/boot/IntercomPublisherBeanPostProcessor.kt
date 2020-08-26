@@ -73,7 +73,7 @@ import java.util.concurrent.ConcurrentHashMap
                             data = null
                         ))
                     for((index, parameter) in method.parameters.withIndex())
-                        if (ClassUtils.objectiveClass(parameter.type) != bundle.parameters[index].javaClass)
+                        if (ClassUtils.objectiveClass(parameter.type) != ClassUtils.objectiveClass(bundle.parameters[index].javaClass))
                             return connection.sendBundle(IntercomReturnBundle(
                                 error = IntercomError.BAD_PARAMS,
                                 data = null
@@ -116,7 +116,7 @@ import java.util.concurrent.ConcurrentHashMap
                 ?: error("id is required in annotation @PublishIntercom")
 
             intercomPublishers[id.hashCode()] = bean to (beanClass.methods
-                .map { it.name.hashCode() xor it.parameters.map { it.type.packageName }.hashCode() to it }
+                .map { it.name.hashCode() xor it.parameters.map { it.type.name }.hashCode() to it }
                 .toMap())
             logger.debug("Mapped publisher $id to registry")
         }
