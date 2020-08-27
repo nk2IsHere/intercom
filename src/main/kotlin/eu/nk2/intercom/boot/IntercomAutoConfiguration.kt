@@ -57,6 +57,8 @@ class IntercomAutoConfiguration {
         IntercomProviderBeanPostProcessor(
             host = properties.host ?: error("Intercom requires client host to be present in configuration"),
             port = properties.port ?: error("Intercom requires client port to be present in configuration"),
+            socketErrorTolerance = properties.socketErrorTolerance ?: false,
+            socketErrorMaxAttempts = properties.socketErrorMaxAttempts ?: 0,
             intercomMethodBundleSerializer = intercomMethodBundleSerializer,
             intercomReturnBundleSerializer = intercomReturnBundleSerializer
         )

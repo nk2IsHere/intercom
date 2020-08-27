@@ -8,6 +8,7 @@ import io.netty.channel.*
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
+import io.netty.handler.timeout.ReadTimeoutHandler
 import org.apache.commons.logging.Log
 import org.apache.commons.logging.LogFactory
 import org.springframework.stereotype.Service
@@ -34,6 +35,7 @@ import java.util.concurrent.CopyOnWriteArrayList
             serverBootstrap.localAddress(InetSocketAddress("0.0.0.0", port))
             serverBootstrap.childHandler(object : ChannelInitializer<SocketChannel>() {
                 override fun initChannel(socketChannel: SocketChannel) {
+                    socketChannel.pipeline().addLast("readTimeoutHandler", ReadTimeoutHandler(5))
                     socketChannel.pipeline().addLast(TcpServerConnectionHandler(
                         listeners = this@TcpServer.listeners
                     ))

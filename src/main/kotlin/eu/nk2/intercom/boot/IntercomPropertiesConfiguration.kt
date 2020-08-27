@@ -11,5 +11,7 @@ import org.springframework.stereotype.Component
 data class IntercomPropertiesConfiguration(
     val serverMode: Boolean?,
     val host: String?,
-    val port: Int?
+    val port: Int?,
+    val socketErrorTolerance: Boolean?,
+    val socketErrorMaxAttempts: Int?
 )

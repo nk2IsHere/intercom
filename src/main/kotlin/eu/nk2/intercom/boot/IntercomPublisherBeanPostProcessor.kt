@@ -34,7 +34,6 @@ import java.util.concurrent.ConcurrentHashMap
 
     private fun <T> AbstractTcpConnection.sendBundle(returnBundle: IntercomReturnBundle<T>): Unit =
         this.send(intercomReturnBundleSerializer.serialize(returnBundle))
-            .also { this.close() }
 
     @EventListener fun init(event: ContextRefreshedEvent) {
         tcpServer.addListener(object : TcpConnectionListener {

@@ -7,6 +7,7 @@ import eu.nk2.intercom.IntercomReturnBundle
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.ProvideIntercom
+import eu.nk2.intercom.utils.Unsafe.Companion.unsafe
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.stereotype.Component
@@ -14,12 +15,16 @@ import org.springframework.util.ReflectionUtils
 import org.springframework.util.SerializationUtils
 import java.lang.reflect.Field
 import java.lang.reflect.Proxy
+import java.net.BindException
 import java.net.Socket
+import java.net.SocketException
 
 @Component
 class IntercomProviderBeanPostProcessor(
     private val host: String,
     private val port: Int,
+    private val socketErrorTolerance: Boolean,
+    private val socketErrorMaxAttempts: Int,
     private val intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
     private val intercomReturnBundleSerializer: IntercomReturnBundleSerializer
 ): BeanPostProcessor {
@@ -42,18 +47,33 @@ class IntercomProviderBeanPostProcessor(
                 parameters = args
             )
 
-            val socket = Socket(host, port)
-            socket.getOutputStream().write(intercomMethodBundleSerializer.serialize(bundle))
 
-            val data = intercomReturnBundleSerializer.deserialize<Any>(socket.getInputStream().readBytes())
-                ?: error("Received unexpected data type")
+            var currentAttempt = 0
+            while (true) {
+                try {
+                    val socket = Socket(host, port)
 
-            socket.close()
+                    socket.getOutputStream().write(intercomMethodBundleSerializer.serialize(bundle))
 
-            if(data.error != null)
-               error(data.error)
+                    val buf = ByteArray(64 * 1024)
+                    val count = socket.getInputStream().read(buf)
+                    val bytes: ByteArray = buf.copyOf(count)
+                    val data = intercomReturnBundleSerializer.deserialize<Any>(bytes)
+                        ?: error("Received unexpected data type")
 
-            data.data
+                    if (data.error != null)
+                        error(data.error)
+
+                    socket.close()
+                    return@newProxyInstance data.data
+                } catch (e: Exception) { when(e) {
+                    is SocketException, is BindException -> {
+                        if(!socketErrorTolerance || currentAttempt == socketErrorMaxAttempts) throw e
+                        currentAttempt += 1
+                    }
+                    else -> throw e
+                } }
+            }
         })
     }
 
