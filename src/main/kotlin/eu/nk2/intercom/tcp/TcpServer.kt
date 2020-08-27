@@ -1,84 +1,93 @@
 package eu.nk2.intercom.tcp
 
-import eu.nk2.intercom.tcp.api.AbstractTcpConnection
-import eu.nk2.intercom.tcp.api.TcpConnectionListener
 import eu.nk2.intercom.tcp.api.AbstractTcpServer
+import eu.nk2.intercom.tcp.api.TcpConnectionListener
+import io.netty.bootstrap.ServerBootstrap
+import io.netty.buffer.ByteBuf
+import io.netty.channel.*
+import io.netty.channel.nio.NioEventLoopGroup
+import io.netty.channel.socket.SocketChannel
+import io.netty.channel.socket.nio.NioServerSocketChannel
 import org.apache.commons.logging.Log
 import org.apache.commons.logging.LogFactory
-import org.springframework.stereotype.Component
+import org.springframework.stereotype.Service
 import java.io.IOException
-import java.net.ServerSocket
-import java.util.*
+import java.net.InetSocketAddress
+import java.util.concurrent.CopyOnWriteArrayList
 
 
-@Component class TcpServer(override val port: Int) : AbstractTcpServer, TcpConnectionListener {
+@Service class TcpServer(override val port: Int) : AbstractTcpServer {
     private val logger: Log = LogFactory.getLog(TcpServer::class.java)
-    override val connections: MutableList<AbstractTcpConnection> = arrayListOf()
 
-    private var serverSocket: ServerSocket? = null
-    private val listeners: MutableList<TcpConnectionListener> = ArrayList()
+    private lateinit var group: EventLoopGroup
+    private lateinit var serverBootstrap: ServerBootstrap
+    private lateinit var channelFuture: ChannelFuture
 
-    @Volatile private var isStopped = false
+    private val listeners: MutableList<TcpConnectionListener> = CopyOnWriteArrayList()
 
     init {
         try {
-            serverSocket = ServerSocket(port)
+            group = NioEventLoopGroup()
+            serverBootstrap = ServerBootstrap()
+            serverBootstrap.group(group)
+            serverBootstrap.channel(NioServerSocketChannel::class.java)
+            serverBootstrap.localAddress(InetSocketAddress("0.0.0.0", port))
+            serverBootstrap.childHandler(object : ChannelInitializer<SocketChannel>() {
+                override fun initChannel(socketChannel: SocketChannel) {
+                    socketChannel.pipeline().addLast(TcpServerConnectionHandler(
+                        listeners = this@TcpServer.listeners
+                    ))
+                }
+            })
+
             logger.info("Intercom TCP server start at port $port")
         } catch (e: IOException) {
             e.printStackTrace()
+            group.shutdownGracefully().sync()
             logger.error("Intercom failed to start on port $port. Check its availability.")
         }
     }
 
     override fun start() {
-        Thread {
-            while (!isStopped) {
-                try {
-                    val socket = serverSocket!!.accept()
-                    if (socket.isConnected) {
-                        val tcpConnection = TcpConnection(socket)
-                        tcpConnection.start()
-                        tcpConnection.addListener(this)
-                        onConnected(tcpConnection)
-                    }
-                } catch (e: IOException) {
-                    e.printStackTrace()
-                }
-            }
-        }.start()
+        channelFuture = serverBootstrap.bind().sync()
     }
 
     override fun stop() {
-        isStopped = true
+        channelFuture.channel().closeFuture().sync()
+        group.shutdownGracefully().sync()
     }
 
     override fun addListener(listener: TcpConnectionListener) {
         listeners.add(listener)
     }
 
-    override fun onMessageReceived(connection: AbstractTcpConnection, message: ByteArray) {
-        logger.trace("Received new message from " + connection.address.canonicalHostName)
-        logger.trace("Class name: " + message.javaClass.canonicalName + ", toString: " + message.toString())
-        for (listener in listeners) {
-            listener.onMessageReceived(connection, message)
-        }
-    }
+    class TcpServerConnectionHandler(private val listeners: List<TcpConnectionListener>): ChannelInboundHandlerAdapter() {
 
-    override fun onConnected(connection: AbstractTcpConnection) {
-        logger.trace("New connection! Ip: " + connection.address.canonicalHostName.toString() + ".")
-        connections.add(connection)
-        logger.trace("Current connections count: " + connections.size)
-        for (listener in listeners) {
-            listener.onConnected(connection)
+        override fun handlerAdded(ctx: ChannelHandlerContext) {
+            synchronized(this) {
+                listeners.forEach { it.onConnected(ctx.toTcpConnection()) }
+            }
         }
-    }
 
-    override fun onDisconnected(connection: AbstractTcpConnection) {
-        logger.trace("Disconnect! Ip: " + connection.address.canonicalHostName.toString() + ".")
-        connections.remove(connection)
-        logger.trace("Current connections count: " + connections.size)
-        for (listener in listeners) {
-            listener.onDisconnected(connection)
+        override fun handlerRemoved(ctx: ChannelHandlerContext) {
+            synchronized(this) {
+                listeners.forEach { it.onDisconnected(ctx.toTcpConnection()) }
+            }
+        }
+
+        override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
+            synchronized(this) {
+                val inBuffer = msg as ByteBuf
+                val bytes = ByteArray(inBuffer.readableBytes())
+                inBuffer.duplicate().readBytes(bytes)
+
+                listeners.forEach { it.onMessageReceived(ctx.toTcpConnection(), bytes) }
+            }
+        }
+
+        override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
+            cause.printStackTrace()
+            ctx.close()
         }
     }
 }

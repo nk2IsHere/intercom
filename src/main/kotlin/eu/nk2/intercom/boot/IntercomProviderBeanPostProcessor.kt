@@ -4,6 +4,8 @@ import eu.nk2.intercom.IntercomError
 import eu.nk2.intercom.IntercomException
 import eu.nk2.intercom.IntercomMethodBundle
 import eu.nk2.intercom.IntercomReturnBundle
+import eu.nk2.intercom.api.IntercomMethodBundleSerializer
+import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.ProvideIntercom
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.config.BeanPostProcessor
@@ -13,17 +15,18 @@ import org.springframework.util.SerializationUtils
 import java.lang.reflect.Field
 import java.lang.reflect.Proxy
 import java.net.Socket
-import kotlin.reflect.full.declaredMembers
 
 @Component
 class IntercomProviderBeanPostProcessor(
     private val host: String,
-    private val port: Int
+    private val port: Int,
+    private val intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
+    private val intercomReturnBundleSerializer: IntercomReturnBundleSerializer
 ): BeanPostProcessor {
     private val logger = LoggerFactory.getLogger(IntercomProviderBeanPostProcessor::class.java)
 
-    fun error(msg: String, error: IntercomError) {
-        throw IntercomException(msg, error)
+    fun error(error: IntercomError) {
+        throw IntercomException(error.message, error)
     }
 
     fun mapProviderField(bean: Any, beanName: String, field: Field) {
@@ -40,23 +43,15 @@ class IntercomProviderBeanPostProcessor(
             )
 
             val socket = Socket(host, port)
-            socket.getOutputStream().write(SerializationUtils.serialize(bundle)!!)
+            socket.getOutputStream().write(intercomMethodBundleSerializer.serialize(bundle))
 
-            val data = SerializationUtils.deserialize(socket.getInputStream().readBytes()) as? IntercomReturnBundle<Any>
+            val data = intercomReturnBundleSerializer.deserialize<Any>(socket.getInputStream().readBytes())
                 ?: error("Received unexpected data type")
 
             socket.close()
 
             if(data.error != null)
-                when(data.error) {
-                    IntercomError.NO_DATA -> error("Server received no data", data.error)
-                    IntercomError.BAD_DATA -> error("Server received bad data", data.error)
-                    IntercomError.BAD_PUBLISHER -> error("Server received bad publisher - it cannot be found", data.error)
-                    IntercomError.BAD_METHOD -> error("Server received bad method - it cannot be found", data.error)
-                    IntercomError.BAD_PARAMS -> error("Server received bad parameters - args count or types mismatch", data.error)
-                    IntercomError.PROVIDER_ERROR -> error("Server produced provider error - check logs", data.error)
-                    IntercomError.INTERNAL_ERROR -> error("Server received internal error - check logs and mentally punch the author", data.error)
-                }
+               error(data.error)
 
             data.data
         })

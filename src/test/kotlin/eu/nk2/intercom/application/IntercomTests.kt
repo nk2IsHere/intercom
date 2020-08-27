@@ -61,20 +61,20 @@ class IntercomTests {
     @Test
     fun intercomBothTestDelayedInterfacesWorkFromDifferentThreads() {
         fun makeTestDelayedInterfaceThread() =
-            Thread {
+            AsyncTester {
                 (1..TEST_DELAYED_BENCHMARK_REPEAT_COUNT).forEach {
                     assert(testDelayedInterface.test(TEST_DELAYED_BENCHMARK_DELAY_MS) == 1) { "TestDelayedInterfaceImpl must return valid answer" }
                 }
             }
 
         fun makeTestSecondDelayedInterfaceThread() =
-            Thread {
+            AsyncTester {
                 (1..TEST_DELAYED_BENCHMARK_REPEAT_COUNT).forEach {
                     assert(secondTestDelayedInterface.test(TEST_DELAYED_BENCHMARK_SECOND_DELAY_MS) == 2) { "TestSecondDelayedInterfaceImpl must return valid answer" }
                 }
             }
 
-        val threadList = CopyOnWriteArrayList<Thread>()
+        val threadList = CopyOnWriteArrayList<AsyncTester>()
         (1..TEST_DELAYED_BENCHMARK_THREAD_COUNT).forEach {
             threadList.add(
                 makeTestDelayedInterfaceThread()
@@ -87,7 +87,7 @@ class IntercomTests {
         }
 
         threadList.forEach {
-            it.join()
+            it.test()
         }
     }
 }

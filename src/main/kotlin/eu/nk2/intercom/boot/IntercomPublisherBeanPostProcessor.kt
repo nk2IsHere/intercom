@@ -2,8 +2,9 @@ package eu.nk2.intercom.boot
 
 import eu.nk2.intercom.ClassUtils
 import eu.nk2.intercom.IntercomError
-import eu.nk2.intercom.IntercomMethodBundle
 import eu.nk2.intercom.IntercomReturnBundle
+import eu.nk2.intercom.api.IntercomMethodBundleSerializer
+import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.PublishIntercom
 import eu.nk2.intercom.tcp.api.AbstractTcpConnection
 import eu.nk2.intercom.tcp.api.AbstractTcpServer
@@ -16,22 +17,23 @@ import org.springframework.core.Ordered
 import org.springframework.core.PriorityOrdered
 import org.springframework.core.annotation.AnnotationUtils
 import org.springframework.stereotype.Component
-import org.springframework.util.SerializationUtils
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.util.concurrent.ConcurrentHashMap
 
 
 @Component class IntercomPublisherBeanPostProcessor(
-    private val tcpServer: AbstractTcpServer
+    private val tcpServer: AbstractTcpServer,
+    private val intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
+    private val intercomReturnBundleSerializer: IntercomReturnBundleSerializer
 ): BeanPostProcessor, PriorityOrdered {
     private val logger = LoggerFactory.getLogger(IntercomPublisherBeanPostProcessor::class.java)
 
     private val intercomPublisherAwareBeans = hashMapOf<String, Class<*>>()
     private val intercomPublishers: MutableMap<Int, Pair<Any, Map<Int, Method>>> = ConcurrentHashMap()
 
-    private fun <T> AbstractTcpConnection.sendBundle(intercomReturnBundle: IntercomReturnBundle<T>): Unit =
-        this.send(SerializationUtils.serialize(intercomReturnBundle)!!)
+    private fun <T> AbstractTcpConnection.sendBundle(returnBundle: IntercomReturnBundle<T>): Unit =
+        this.send(intercomReturnBundleSerializer.serialize(returnBundle))
             .also { this.close() }
 
     @EventListener fun init(event: ContextRefreshedEvent) {
@@ -46,7 +48,7 @@ import java.util.concurrent.ConcurrentHashMap
 
             override fun onMessageReceived(connection: AbstractTcpConnection, message: ByteArray) {
                 try {
-                    val bundle = SerializationUtils.deserialize(message) as? IntercomMethodBundle
+                    val bundle = intercomMethodBundleSerializer.deserialize(message)
                         ?: return connection.sendBundle(IntercomReturnBundle(
                             error = IntercomError.NO_DATA,
                             data = null
