@@ -24,9 +24,7 @@ class IntercomTests {
 
     @Test
     fun intercomMethodWorks() {
-        (1..TEST_BENCHMARK_REPEAT_COUNT).forEach {
-            assert(testInterface.testA(1, 2) == "3") { "TestInterfaceImpl must return valid answer" }
-        }
+        assert(testInterface.testA(1, 2) == "3") { "TestInterfaceImpl must return valid answer" }
     }
 
     @Test

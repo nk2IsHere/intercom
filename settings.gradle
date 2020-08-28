@@ -1,1 +1,2 @@
-rootProject.name = 'intercom'
+rootProject.name = 'main'
+include ':perf', ':intercom'
