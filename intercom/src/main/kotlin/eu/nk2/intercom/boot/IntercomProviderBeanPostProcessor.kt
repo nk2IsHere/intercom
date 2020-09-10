@@ -19,6 +19,7 @@ import reactor.netty.tcp.TcpClient
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
+import java.time.Duration
 import java.util.*
 
 @Component
@@ -48,7 +49,7 @@ class IntercomProviderBeanPostProcessor(
             .doOnNext { if(it.error != null) throw IntercomException(it.error) }
             .flatMap { it.data?.toMono() ?: Mono.empty() }
             .next()
-            .doOnNext { connection.disposeNow() }
+            .doOnNext { connection.disposeNow(Duration.ZERO) }
     }
 
     fun mapProviderField(bean: Any, beanName: String, field: Field) {
