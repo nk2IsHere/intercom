@@ -2,7 +2,7 @@ package eu.nk2.intercom
 
 import java.io.Serializable
 
-class IntercomException(val msg: String, val error: IntercomError): Exception("$error: $msg")
+class IntercomException(val error: IntercomError): Exception("$error: ${error.message}")
 
 enum class IntercomError(val message: String): Serializable {
     NO_DATA("Server received no data"),

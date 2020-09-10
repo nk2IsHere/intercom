@@ -7,25 +7,19 @@ import eu.nk2.intercom.IntercomReturnBundle
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.ProvideIntercom
-import io.netty.channel.ChannelOption
-import io.netty.handler.ssl.SslContextBuilder
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory
-import io.netty.handler.timeout.ReadTimeoutHandler
-import io.netty.handler.timeout.WriteTimeoutHandler
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.stereotype.Component
 import org.springframework.util.ReflectionUtils
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import reactor.kotlin.core.publisher.toMono
+import reactor.netty.Connection
 import reactor.netty.tcp.TcpClient
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.util.*
-import reactor.kotlin.core.publisher.cast
-import reactor.kotlin.core.publisher.toMono
-import reactor.netty.Connection
 
 @Component
 class IntercomProviderBeanPostProcessor(
@@ -51,7 +45,7 @@ class IntercomProviderBeanPostProcessor(
             .filter { it.isPresent }
             .map { it.get() }
             .defaultIfEmpty(IntercomReturnBundle(error = IntercomError.INTERNAL_ERROR, data = null))
-            .doOnNext { if(it.error != null) throw IntercomException(it.error.message, it.error) }
+            .doOnNext { if(it.error != null) throw IntercomException(it.error) }
             .flatMap { it.data?.toMono() ?: Mono.empty() }
             .next()
             .doOnNext { connection.disposeNow() }
@@ -69,8 +63,7 @@ class IntercomProviderBeanPostProcessor(
                 .let {
                     when(method.returnType) {
                         Mono::class.java -> it
-                        Flux::class.java -> it.cast<Array<*>>()
-                            .flatMapMany { Flux.fromArray(it) }
+                        Flux::class.java -> it.flatMapMany { Flux.fromIterable(it as List<*>) }
                         else -> error("Unknown error")
                     }
                 }
