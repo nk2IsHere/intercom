@@ -10,8 +10,10 @@ import org.springframework.stereotype.Component
 @ConfigurationProperties(prefix = "intercom")
 data class IntercomPropertiesConfiguration(
     val serverMode: Boolean?,
+    val serverSslSecurity: Boolean?,
+    val serverAllowWiretapping: Boolean?,
     val host: String?,
     val port: Int?,
-    val socketErrorTolerance: Boolean?,
-    val socketErrorMaxAttempts: Int?
+    val clientSslSecurity: Boolean?,
+    val clientAllowWiretapping: Boolean?
 )

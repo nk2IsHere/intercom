@@ -1,10 +1,8 @@
-logging:
-  level:
-    eu.nk2.intercom: debug
+#logging:
+#  level:
+#    eu.nk2.intercom: debug
 
 intercom:
-  serverMode: true
+  server-mode: true
   host: "localhost"
   port: 1000
-  socketErrorTolerance: false
-  socketErrorMaxAttempts: 10

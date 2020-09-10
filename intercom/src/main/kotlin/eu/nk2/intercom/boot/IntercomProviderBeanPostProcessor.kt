@@ -7,31 +7,54 @@ import eu.nk2.intercom.IntercomReturnBundle
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.ProvideIntercom
-import eu.nk2.intercom.utils.Unsafe.Companion.unsafe
+import io.netty.channel.ChannelOption
+import io.netty.handler.ssl.SslContextBuilder
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory
+import io.netty.handler.timeout.ReadTimeoutHandler
+import io.netty.handler.timeout.WriteTimeoutHandler
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.stereotype.Component
 import org.springframework.util.ReflectionUtils
-import org.springframework.util.SerializationUtils
+import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
+import reactor.netty.tcp.TcpClient
 import java.lang.reflect.Field
+import java.lang.reflect.Method
 import java.lang.reflect.Proxy
-import java.net.BindException
-import java.net.Socket
-import java.net.SocketException
+import java.util.*
+import reactor.kotlin.core.publisher.cast
+import reactor.kotlin.core.publisher.toMono
+import reactor.netty.Connection
 
 @Component
 class IntercomProviderBeanPostProcessor(
-    private val host: String,
-    private val port: Int,
-    private val socketErrorTolerance: Boolean,
-    private val socketErrorMaxAttempts: Int,
+    private val tcpClient: TcpClient,
     private val intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
     private val intercomReturnBundleSerializer: IntercomReturnBundleSerializer
 ): BeanPostProcessor {
     private val logger = LoggerFactory.getLogger(IntercomProviderBeanPostProcessor::class.java)
 
-    fun error(error: IntercomError) {
-        throw IntercomException(error.message, error)
+    fun makeTcpConnectionMono(connection: Connection, id: String, method: Method, args: Array<Any>): Mono<Any?> {
+        connection.outbound()
+            .sendByteArray(Mono.fromCallable { intercomMethodBundleSerializer.serialize(IntercomMethodBundle(
+                publisherId = id.hashCode(),
+                methodId = method.name.hashCode() xor method.parameters.map { it.type.name }.hashCode(),
+                parameters = args
+            )) })
+            .then()
+            .subscribe()
+
+        return connection.inbound().receive()
+            .asByteArray()
+            .map { Optional.ofNullable(intercomReturnBundleSerializer.deserialize<Any>(it)) }
+            .filter { it.isPresent }
+            .map { it.get() }
+            .defaultIfEmpty(IntercomReturnBundle(error = IntercomError.INTERNAL_ERROR, data = null))
+            .doOnNext { if(it.error != null) throw IntercomException(it.error.message, it.error) }
+            .flatMap { it.data?.toMono() ?: Mono.empty() }
+            .next()
+            .doOnNext { connection.channel().close() }
     }
 
     fun mapProviderField(bean: Any, beanName: String, field: Field) {
@@ -41,39 +64,16 @@ class IntercomProviderBeanPostProcessor(
 
         ReflectionUtils.makeAccessible(field)
         field.set(bean, Proxy.newProxyInstance(bean.javaClass.classLoader, arrayOf(field.type)) { _, method, args ->
-            val bundle = IntercomMethodBundle(
-                publisherId = id.hashCode(),
-                methodId = method.name.hashCode() xor method.parameters.map { it.type.name }.hashCode(),
-                parameters = args
-            )
-
-
-            var currentAttempt = 0
-            while (true) {
-                try {
-                    val socket = Socket(host, port)
-
-                    socket.getOutputStream().write(intercomMethodBundleSerializer.serialize(bundle))
-
-                    val buf = ByteArray(64 * 1024)
-                    val count = socket.getInputStream().read(buf)
-                    val bytes: ByteArray = buf.copyOf(count)
-                    val data = intercomReturnBundleSerializer.deserialize<Any>(bytes)
-                        ?: error("Received unexpected data type")
-
-                    if (data.error != null)
-                        error(data.error)
-
-                    socket.close()
-                    return@newProxyInstance data.data
-                } catch (e: Exception) { when(e) {
-                    is SocketException, is BindException -> {
-                        if(!socketErrorTolerance || currentAttempt == socketErrorMaxAttempts) throw e
-                        currentAttempt += 1
+            return@newProxyInstance tcpClient.connect()
+                .flatMap { makeTcpConnectionMono(it, id, method, args) }
+                .let {
+                    when(method.returnType) {
+                        Mono::class.java -> it
+                        Flux::class.java -> it.cast<Array<*>>()
+                            .flatMapMany { Flux.fromArray(it) }
+                        else -> error("Unknown error")
                     }
-                    else -> throw e
-                } }
-            }
+                }
         })
     }
 

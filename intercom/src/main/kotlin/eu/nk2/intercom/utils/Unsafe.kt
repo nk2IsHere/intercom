@@ -6,13 +6,13 @@ import kotlin.reflect.KClass
 //
 // Shoutouts: https://github.com/MaaxGr/KotlinUtils/blob/master/src/main/kotlin/de/maaxgr/kotlinutils/Unsafe.kt
 //
-class Unsafe {
+internal class Unsafe {
 
     private var dangerCallback: () -> Unit = {  }
     private val exceptionHandlers = mutableMapOf<KClass<out Any>, () -> Unit>()
 
     companion object {
-        fun Any.unsafe(callback: Unsafe.() -> Unit) {
+        internal fun Any.unsafe(callback: Unsafe.() -> Unit) {
             Unsafe().apply {
                 callback()
                 execute()

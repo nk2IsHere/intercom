@@ -3,7 +3,8 @@
     {
       "name": "intercom.serverMode",
       "type": "java.lang.Boolean",
-      "description": "Intercom mode."
+      "description": "Intercom mode.",
+      "defaultValue": false
     },
     {
       "name": "intercom.host",
@@ -16,14 +17,28 @@
       "description": "Intercom tcp socket port."
     },
     {
-      "name": "intercom.socketErrorTolerance",
+      "name": "intercom.serverSslSecurity",
       "type": "java.lang.Boolean",
-      "description": "Intercom tcp socket client error tolerance (use in pair with socketErrorMaxAttempts)."
+      "description": "Enable SSL Security on server.",
+      "defaultValue": false
     },
     {
-      "name": "intercom.socketErrorMaxAttempts",
-      "type": "java.lang.Integer",
-      "description": "Intercom tcp socket client max error attempts before crashing."
+      "name": "intercom.serverAllowWiretapping",
+      "type": "java.lang.Boolean",
+      "description": "Enable netty wiretapping on server.",
+      "defaultValue": false
+    },
+    {
+      "name": "intercom.clientSslSecurity",
+      "type": "java.lang.Boolean",
+      "description": "Enable SSL Security on client.",
+      "defaultValue": false
+    },
+    {
+      "name": "intercom.clientAllowWiretapping",
+      "type": "java.lang.Boolean",
+      "description": "Enable netty wiretapping on client.",
+      "defaultValue": false
     }
   ]
 }

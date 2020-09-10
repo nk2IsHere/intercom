@@ -1,16 +1,16 @@
-package eu.nk2.intercom;
+package eu.nk2.intercom.boot;
 
 import java.lang.reflect.Array;
 
 //
 // Shoutout: https://stackoverflow.com/questions/180097/dynamically-find-the-class-that-represents-a-primitive-java-type
 //
-public class ClassUtils {
-    public static <C> Class<C[]> arrayClass(Class<C> klass) {
+class ClassUtils {
+    protected static <C> Class<C[]> arrayClass(Class<C> klass) {
         return (Class<C[]>) Array.newInstance(klass, 0).getClass();
     }
 
-    public static Class<?> objectiveClass(Class<?> klass) {
+    protected static Class<?> objectiveClass(Class<?> klass) {
         Class<?> component = klass.getComponentType();
         if (component != null) {
             if (component.isPrimitive() || component.isArray())
@@ -37,7 +37,7 @@ public class ClassUtils {
         return klass;
     }
 
-    public static Class<?> primitiveClass(Class<?> klass) {
+    protected static Class<?> primitiveClass(Class<?> klass) {
         if (klass == Character.class)
             return char.class;
         if (klass == Integer.class)

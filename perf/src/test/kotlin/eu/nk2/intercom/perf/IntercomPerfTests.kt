@@ -18,14 +18,14 @@ class IntercomPerfTests {
         val a = Random.nextInt()
         val b = Random.nextInt()
 
-        assert(testInterface.testA(a, b) == "${a+b}") { "TestInterfaceImpl must return valid answer" }
+        assert(testInterface.testA(a, b).block() == "${a+b}") { "TestInterfaceImpl must return valid answer" }
     }
 
     //
     // TODO: Sorry for this incomprehensible bullshit, i WILL refactor it one day
     //
     @Test
-    fun testWebFluxCommunication() {
+    fun testIntercomCommunication() {
         logger.info("Warming up")
         (1..TEST_BENCHMARK_WARMUP_COUNT).forEach { produceLoad() }
 

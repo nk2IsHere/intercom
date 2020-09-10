@@ -23,19 +23,21 @@ class IntercomWebfluxPerfTests {
         val b = Random.nextInt()
 
         assert(
-            webClient.get()
+            webClient.post()
                 .uri {
                     it.scheme("http")
                         .host("localhost")
                         .port(randomServerPort)
                         .path("/perf")
-                        .queryParam("a", a)
-                        .queryParam("b", b)
                         .build()
                 }
+                .bodyValue(WebFluxRequest(
+                    id = WEB_FLUX_ID_ADD,
+                    args = arrayOf(a, b)
+                ))
                 .retrieve()
-                .bodyToMono<String>()
-                .block()!! == "${a+b}"
+                .bodyToMono<WebFluxResponse<String>>()
+                .block()?.data == "${a+b}"
         ) {
             "WebFluxController must return valid answer"
         }
