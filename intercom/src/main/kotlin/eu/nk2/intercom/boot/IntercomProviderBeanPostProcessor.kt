@@ -54,7 +54,7 @@ class IntercomProviderBeanPostProcessor(
             .doOnNext { if(it.error != null) throw IntercomException(it.error.message, it.error) }
             .flatMap { it.data?.toMono() ?: Mono.empty() }
             .next()
-            .doOnNext { connection.channel().close() }
+            .doOnNext { connection.disposeNow() }
     }
 
     fun mapProviderField(bean: Any, beanName: String, field: Field) {
