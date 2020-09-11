@@ -3,6 +3,6 @@
 #    eu.nk2.intercom: debug
 
 intercom:
-  server-mode: true
+  starter-mode: CLIENT_SERVER
   host: "localhost"
   port: 1000

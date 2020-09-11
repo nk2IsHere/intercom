@@ -4,6 +4,7 @@ import eu.nk2.intercom.DefaultIntercomMethodBundleSerializer
 import eu.nk2.intercom.DefaultIntercomReturnBundleSerializer
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
+import eu.nk2.intercom.api.IntercomStarterMode
 import io.netty.channel.ChannelOption
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
@@ -11,23 +12,25 @@ import io.netty.handler.ssl.util.SelfSignedCertificate
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
+import org.springframework.boot.autoconfigure.condition.AnyNestedCondition
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Configuration
-import org.springframework.context.annotation.Scope
+import org.springframework.context.annotation.*
+import org.springframework.context.annotation.ConfigurationCondition.ConfigurationPhase
+import org.springframework.core.type.AnnotatedTypeMetadata
 import reactor.netty.tcp.TcpClient
 import reactor.netty.tcp.TcpServer
 
+
 @Configuration
 @EnableConfigurationProperties(IntercomPropertiesConfiguration::class)
-@ConditionalOnProperty(prefix = "intercom", name = ["server-mode", "host", "port"])
+@Conditional(IntercomAutoConfigurationEnabledCondition::class)
 class IntercomAutoConfiguration {
 
     @Bean(INTERCOM_TCP_SERVER_BEAN_ID)
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
-    @ConditionalOnProperty(prefix = "intercom", name = ["server-mode"], havingValue = "true", matchIfMissing = true)
+    @Conditional(IntercomAutoConfigurationServerEnabledCondition::class)
     fun intercomTcpServer(
         @Autowired properties: IntercomPropertiesConfiguration
     ): TcpServer =
@@ -45,7 +48,7 @@ class IntercomAutoConfiguration {
 
     @Bean
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
-    @ConditionalOnProperty(prefix = "intercom", name = ["server-mode"], havingValue = "true", matchIfMissing = true)
+    @Conditional(IntercomAutoConfigurationServerEnabledCondition::class)
     fun intercomPublisherBeanPostProcessor(
         @Autowired @Qualifier(INTERCOM_TCP_SERVER_BEAN_ID) tcpServer: TcpServer,
         @Autowired intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
@@ -59,6 +62,7 @@ class IntercomAutoConfiguration {
 
     @Bean(INTERCOM_TCP_CLIENT_BEAN_ID)
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
+    @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
     fun tcpClient(
         @Autowired properties: IntercomPropertiesConfiguration
     ): TcpClient =
@@ -74,6 +78,7 @@ class IntercomAutoConfiguration {
 
     @Bean
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
+    @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
     fun intercomProviderBeanPostProcessor(
         @Autowired properties: IntercomPropertiesConfiguration,
         @Autowired @Qualifier(INTERCOM_TCP_CLIENT_BEAN_ID) tcpClient: TcpClient,
@@ -99,4 +104,46 @@ class IntercomAutoConfiguration {
     ): IntercomReturnBundleSerializer =
         DefaultIntercomReturnBundleSerializer(
         )
+}
+
+internal class IntercomAutoConfigurationEnabledCondition: Condition {
+    private val acceptedIntercomPrefix = "intercom"
+    private val acceptedIntercomPropertyNames = arrayOf("starter_mode", "starter-mode", "starterMode")
+    private val acceptedIntercomModes = arrayOf(null, IntercomStarterMode.CLIENT_ONLY, IntercomStarterMode.CLIENT_SERVER, IntercomStarterMode.SERVER_ONLY)
+
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean =
+        acceptedIntercomPropertyNames.asSequence()
+            .map { "$acceptedIntercomPrefix.$it" }
+            .map { context.environment.getProperty(it) }
+            .filterNotNull()
+            .firstOrNull()
+            ?.let { IntercomStarterMode.valueOf(it) } in acceptedIntercomModes
+}
+
+internal class IntercomAutoConfigurationServerEnabledCondition: Condition {
+    private val acceptedIntercomPrefix = "intercom"
+    private val acceptedIntercomPropertyNames = arrayOf("starter_mode", "starter-mode", "starterMode")
+    private val acceptedIntercomModes = arrayOf(IntercomStarterMode.SERVER_ONLY, IntercomStarterMode.CLIENT_SERVER)
+
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean =
+        acceptedIntercomPropertyNames.asSequence()
+            .map { "$acceptedIntercomPrefix.$it" }
+            .map { context.environment.getProperty(it) }
+            .filterNotNull()
+            .firstOrNull()
+            ?.let { IntercomStarterMode.valueOf(it) } in acceptedIntercomModes
+}
+
+internal class IntercomAutoConfigurationClientEnabledCondition: Condition {
+    private val acceptedIntercomPrefix = "intercom"
+    private val acceptedIntercomPropertyNames = arrayOf("starter_mode", "starter-mode", "starterMode")
+    private val acceptedIntercomModes = arrayOf(null, IntercomStarterMode.CLIENT_ONLY, IntercomStarterMode.CLIENT_SERVER)
+
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean =
+        acceptedIntercomPropertyNames.asSequence()
+            .map { "$acceptedIntercomPrefix.$it" }
+            .map { context.environment.getProperty(it) }
+            .filterNotNull()
+            .firstOrNull()
+            ?.let { IntercomStarterMode.valueOf(it) } in acceptedIntercomModes
 }

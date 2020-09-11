@@ -1,10 +1,10 @@
 {
   "properties": [
     {
-      "name": "intercom.serverMode",
-      "type": "java.lang.Boolean",
+      "name": "intercom.starterMode",
+      "type": "eu.nk2.intercom.api.IntercomStarterMode",
       "description": "Intercom mode.",
-      "defaultValue": false
+      "defaultValue": "CLIENT_ONLY"
     },
     {
       "name": "intercom.host",
@@ -14,7 +14,7 @@
     {
       "name": "intercom.port",
       "type": "java.lang.Integer",
-      "description": "Intercom tcp socket port."
+      "description": "Intercom tcp socket port (applicable to client instances)."
     },
     {
       "name": "intercom.serverSslSecurity",
