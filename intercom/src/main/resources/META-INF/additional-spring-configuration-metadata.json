@@ -2,42 +2,37 @@
   "properties": [
     {
       "name": "intercom.starterMode",
-      "type": "eu.nk2.intercom.api.IntercomStarterMode",
+      "type": "eu.nk2.intercom.IntercomStarterMode",
       "description": "Intercom mode.",
       "defaultValue": "CLIENT_ONLY"
     },
     {
-      "name": "intercom.host",
+      "name": "intercom.kafkaBrokers",
       "type": "java.lang.String",
-      "description": "Intercom tcp socket host (applicable to client instances)."
+      "description": "Intercom kafka broker instances."
     },
     {
-      "name": "intercom.port",
+      "name": "intercom.kafkaApplicationId",
+      "type": "java.lang.String",
+      "description": "Intercom kafka server application id.",
+      "defaultValue": false
+    },
+    {
+      "name": "intercom.kafkaTopicPrefix",
+      "type": "java.lang.String",
+      "description": "Intercom kafka server topic prefix.",
+      "defaultValue": false
+    },
+    {
+      "name": "intercom.kafkaPartitionNumber",
       "type": "java.lang.Integer",
-      "description": "Intercom tcp socket port (applicable to client instances)."
-    },
-    {
-      "name": "intercom.serverSslSecurity",
-      "type": "java.lang.Boolean",
-      "description": "Enable SSL Security on server.",
+      "description": "Intercom kafka server topic parition number.",
       "defaultValue": false
     },
     {
-      "name": "intercom.serverAllowWiretapping",
-      "type": "java.lang.Boolean",
-      "description": "Enable netty wiretapping on server.",
-      "defaultValue": false
-    },
-    {
-      "name": "intercom.clientSslSecurity",
-      "type": "java.lang.Boolean",
-      "description": "Enable SSL Security on client.",
-      "defaultValue": false
-    },
-    {
-      "name": "intercom.clientAllowWiretapping",
-      "type": "java.lang.Boolean",
-      "description": "Enable netty wiretapping on client.",
+      "name": "intercom.kafkaReplicationFactor",
+      "type": "java.lang.Short",
+      "description": "Intercom kafka server topic replication factor.",
       "defaultValue": false
     }
   ]

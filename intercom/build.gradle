@@ -6,7 +6,7 @@ plugins {
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter'
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-	implementation 'org.springframework.boot:spring-boot-starter-reactor-netty'
+	implementation 'io.projectreactor.kafka:reactor-kafka'
 
 	implementation 'io.projectreactor:reactor-core'
 	implementation 'io.projectreactor.kotlin:reactor-kotlin-extensions'
@@ -22,7 +22,7 @@ dependencies {
 }
 
 noArg {
-	annotation("eu.nk2.intercom.boot.NoArg")
+	annotation("eu.nk2.intercom.utils.NoArg")
 }
 
 bootJar.enabled = false

@@ -1,10 +1,12 @@
 logging:
   level:
     eu.nk2.intercom: debug
+    org.apache.kafka: error
 
 intercom:
   starter-mode: CLIENT_SERVER
-  host: localhost
-  port: 1000
-  server-ssl-security: true
-  client-ssl-security: true
+  kafka-brokers: localhost:9092
+  kafka-application-id: "intercom-test"
+  kafka-topic-prefix: "intercom-test-topic-"
+  kafka-partition-number: 3
+  kafka-replication-factor: 3

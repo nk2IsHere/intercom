@@ -4,23 +4,16 @@ import eu.nk2.intercom.DefaultIntercomMethodBundleSerializer
 import eu.nk2.intercom.DefaultIntercomReturnBundleSerializer
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
-import eu.nk2.intercom.api.IntercomStarterMode
-import io.netty.channel.ChannelOption
-import io.netty.handler.ssl.SslContextBuilder
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory
-import io.netty.handler.ssl.util.SelfSignedCertificate
+import eu.nk2.intercom.IntercomStarterMode
+import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.serialization.*
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
-import org.springframework.boot.autoconfigure.condition.AnyNestedCondition
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.*
-import org.springframework.context.annotation.ConfigurationCondition.ConfigurationPhase
-import org.springframework.core.type.AnnotatedTypeMetadata
-import reactor.netty.tcp.TcpClient
-import reactor.netty.tcp.TcpServer
 
 
 @Configuration
@@ -28,65 +21,52 @@ import reactor.netty.tcp.TcpServer
 @Conditional(IntercomAutoConfigurationEnabledCondition::class)
 class IntercomAutoConfiguration {
 
-    @Bean(INTERCOM_TCP_SERVER_BEAN_ID)
+    @Bean(INTERCOM_KAFKA_STREAM_PROPERTIES_BEAN_ID)
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
-    @Conditional(IntercomAutoConfigurationServerEnabledCondition::class)
-    fun intercomTcpServer(
+    fun intercomKafkaStreamProperties(
         @Autowired properties: IntercomPropertiesConfiguration
-    ): TcpServer =
-        TcpServer.create()
-            .option(ChannelOption.AUTO_CLOSE, true)
-            .port(properties.port ?: error("Intercom requires server port to be present in configuration"))
-            .wiretap(properties.serverAllowWiretapping ?: false)
-            .let {
-                if(properties.serverSslSecurity == true) it.secure { SelfSignedCertificate().apply {
-                    it.sslContext(SslContextBuilder.forServer(this.certificate(), this.privateKey()))
-                } }
-                else it
-            }
+    ): Map<String, Any> = mapOf(
+//        ProducerConfig.APPLICATION_ID_CONFIG to (properties.kafkaApplicationId ?: error("intercom.kafkaApplicationId is required")),
+        ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to (properties.kafkaBrokers ?: error("intercom.kafkaBrokers is required")),
+        ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
+        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to ByteArraySerializer::class.java,
+        ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
+        ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to ByteArrayDeserializer::class.java,
+//        ProducerConfig.ACKS_CONFIG to "0",
+//        ProducerConfig.RETRIES_CONFIG to "0",
+        ProducerConfig.ACKS_CONFIG to "all",
+
+        INTERCOM_KAFKA_TOPIC_PREFIX_KEY to (properties.kafkaTopicPrefix?: error("intercom.kafkaTopicPrefix is required")),
+        INTERCOM_KAFKA_TOPIC_PARTITION_NUMBER_KEY to (properties.kafkaPartitionNumber ?: error("intercom.kafkaPartitionNumber is required")),
+        INTERCOM_KAFKA_TOPIC_REPLICATION_FACTOR_KEY to (properties.kafkaReplicationFactor ?: error("intercom.kafkaReplicationFactor is required"))
+    )
 
 
     @Bean
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
     @Conditional(IntercomAutoConfigurationServerEnabledCondition::class)
     fun intercomPublisherBeanPostProcessor(
-        @Autowired @Qualifier(INTERCOM_TCP_SERVER_BEAN_ID) tcpServer: TcpServer,
+        @Autowired @Qualifier(INTERCOM_KAFKA_STREAM_PROPERTIES_BEAN_ID) kafkaStreamProperties: Map<String, Any>,
         @Autowired intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
         @Autowired intercomReturnBundleSerializer: IntercomReturnBundleSerializer
     ): IntercomPublisherBeanPostProcessor =
         IntercomPublisherBeanPostProcessor(
-            tcpServer = tcpServer,
+            kafkaStreamProperties = kafkaStreamProperties,
             intercomMethodBundleSerializer = intercomMethodBundleSerializer,
             intercomReturnBundleSerializer = intercomReturnBundleSerializer
         )
-
-    @Bean(INTERCOM_TCP_CLIENT_BEAN_ID)
-    @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
-    @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
-    fun tcpClient(
-        @Autowired properties: IntercomPropertiesConfiguration
-    ): TcpClient =
-        TcpClient.create()
-            .option(ChannelOption.AUTO_CLOSE, true)
-            .host(properties.host ?: error("Intercom requires client host to be present in configuration"))
-            .port(properties.port ?: error("Intercom requires client port to be present in configuration"))
-            .wiretap(properties.clientAllowWiretapping ?: false)
-            .let {
-                if(properties.clientSslSecurity == true) it.secure{ it.sslContext(SslContextBuilder.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE)) }
-                else it
-            }
 
     @Bean
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
     @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
     fun intercomProviderBeanPostProcessor(
         @Autowired properties: IntercomPropertiesConfiguration,
-        @Autowired @Qualifier(INTERCOM_TCP_CLIENT_BEAN_ID) tcpClient: TcpClient,
+        @Autowired @Qualifier(INTERCOM_KAFKA_STREAM_PROPERTIES_BEAN_ID) kafkaStreamProperties: Map<String, Any>,
         @Autowired intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
         @Autowired intercomReturnBundleSerializer: IntercomReturnBundleSerializer
     ): IntercomProviderBeanPostProcessor =
         IntercomProviderBeanPostProcessor(
-            tcpClient = tcpClient,
+            kafkaStreamProperties = kafkaStreamProperties,
             intercomMethodBundleSerializer = intercomMethodBundleSerializer,
             intercomReturnBundleSerializer = intercomReturnBundleSerializer
         )
@@ -106,44 +86,25 @@ class IntercomAutoConfiguration {
         )
 }
 
-internal class IntercomAutoConfigurationEnabledCondition: Condition {
-    private val acceptedIntercomPrefix = "intercom"
-    private val acceptedIntercomPropertyNames = arrayOf("starter_mode", "starter-mode", "starterMode")
-    private val acceptedIntercomModes = arrayOf(null, IntercomStarterMode.CLIENT_ONLY, IntercomStarterMode.CLIENT_SERVER, IntercomStarterMode.SERVER_ONLY)
+internal class IntercomAutoConfigurationEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
+    INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
+    { IntercomStarterMode.valueOf(it) },
+    listOf(
+        null,
+        IntercomStarterMode.CLIENT_ONLY,
+        IntercomStarterMode.CLIENT_SERVER,
+        IntercomStarterMode.SERVER_ONLY
+    )
+)
 
-    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean =
-        acceptedIntercomPropertyNames.asSequence()
-            .map { "$acceptedIntercomPrefix.$it" }
-            .map { context.environment.getProperty(it) }
-            .filterNotNull()
-            .firstOrNull()
-            ?.let { IntercomStarterMode.valueOf(it) } in acceptedIntercomModes
-}
+internal class IntercomAutoConfigurationServerEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
+    INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
+    { IntercomStarterMode.valueOf(it) },
+    listOf(IntercomStarterMode.SERVER_ONLY, IntercomStarterMode.CLIENT_SERVER)
+)
 
-internal class IntercomAutoConfigurationServerEnabledCondition: Condition {
-    private val acceptedIntercomPrefix = "intercom"
-    private val acceptedIntercomPropertyNames = arrayOf("starter_mode", "starter-mode", "starterMode")
-    private val acceptedIntercomModes = arrayOf(IntercomStarterMode.SERVER_ONLY, IntercomStarterMode.CLIENT_SERVER)
-
-    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean =
-        acceptedIntercomPropertyNames.asSequence()
-            .map { "$acceptedIntercomPrefix.$it" }
-            .map { context.environment.getProperty(it) }
-            .filterNotNull()
-            .firstOrNull()
-            ?.let { IntercomStarterMode.valueOf(it) } in acceptedIntercomModes
-}
-
-internal class IntercomAutoConfigurationClientEnabledCondition: Condition {
-    private val acceptedIntercomPrefix = "intercom"
-    private val acceptedIntercomPropertyNames = arrayOf("starter_mode", "starter-mode", "starterMode")
-    private val acceptedIntercomModes = arrayOf(null, IntercomStarterMode.CLIENT_ONLY, IntercomStarterMode.CLIENT_SERVER)
-
-    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean =
-        acceptedIntercomPropertyNames.asSequence()
-            .map { "$acceptedIntercomPrefix.$it" }
-            .map { context.environment.getProperty(it) }
-            .filterNotNull()
-            .firstOrNull()
-            ?.let { IntercomStarterMode.valueOf(it) } in acceptedIntercomModes
-}
+internal class IntercomAutoConfigurationClientEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
+    INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
+    { IntercomStarterMode.valueOf(it) },
+    listOf(null, IntercomStarterMode.CLIENT_ONLY, IntercomStarterMode.CLIENT_SERVER)
+)

@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.ui.context.Theme
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 
 @SpringBootTest(classes = [IntercomApplication::class])
 class IntercomTests {
@@ -44,7 +45,6 @@ class IntercomTests {
 
     @Test
     fun intercomAnotherMethodOverloadedDifferentTypeWorks() {
-        println(testInterface.testB("aaa", 4).blockFirst())
         assert(testInterface.testB("aaa", 4).blockFirst() == "4aaa") { "TestInterfaceImpl must return valid answer" }
     }
 

@@ -1,5 +1,6 @@
-package eu.nk2.intercom.boot
+package eu.nk2.intercom.api
 
+import eu.nk2.intercom.boot.IntercomAutoConfiguration
 import org.springframework.context.annotation.Import
 
 @Import(IntercomAutoConfiguration::class)
