@@ -8,11 +8,8 @@ import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.ProvideIntercom
 import eu.nk2.intercom.utils.firstMapWith
-import eu.nk2.intercom.utils.then
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.clients.consumer.KafkaConsumer
-import org.apache.kafka.clients.producer.KafkaProducer
-import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.config.BeanPostProcessor
@@ -23,9 +20,9 @@ import org.springframework.stereotype.Component
 import org.springframework.util.ReflectionUtils
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
-import reactor.core.scheduler.Schedulers
 import reactor.kafka.receiver.KafkaReceiver
 import reactor.kafka.receiver.ReceiverOptions
+import reactor.kafka.receiver.ReceiverRecord
 import reactor.kafka.sender.KafkaSender
 import reactor.kafka.sender.SenderOptions
 import reactor.kafka.sender.SenderRecord
@@ -35,6 +32,7 @@ import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.time.Duration
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 
 @Component
 class IntercomProviderBeanPostProcessor(
@@ -45,6 +43,7 @@ class IntercomProviderBeanPostProcessor(
     private val logger = LoggerFactory.getLogger(IntercomProviderBeanPostProcessor::class.java)
 
     private lateinit var kafkaSender: KafkaSender<String, ByteArray>
+    private val kafkaReceivers: MutableMap<String, Flux<ConsumerRecord<String, ByteArray>>> = ConcurrentHashMap()
 
     @EventListener fun init(event: ContextRefreshedEvent) {
         kafkaSender = KafkaSender.create(SenderOptions.create<String, ByteArray>(kafkaStreamProperties))
@@ -54,18 +53,23 @@ class IntercomProviderBeanPostProcessor(
         kafkaSender.close()
     }
 
-    fun makeTcpConnectionMono(id: String, method: Method, args: Array<Any>): Mono<Any?> {
-        val kafkaReceiver = KafkaReceiver.create(
+    fun bootstrapKafkaRequestReceiver(id: String) =
+        KafkaReceiver.create(
             ReceiverOptions.create<String, ByteArray>(kafkaStreamProperties + (ConsumerConfig.GROUP_ID_CONFIG to UUID.randomUUID().toString()))
-                .subscription(listOf(
-                    "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_response_${id.hashCode()}"
-                ))
-        )
+                .subscription(listOf("${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_response_${id.hashCode()}"))
+                .addAssignListener { partitions -> logger.debug("Provider $id onPartitionsAssigned {}", partitions) }
+                .addRevokeListener { partitions -> logger.debug("Provider $id onPartitionsRevoked {}", partitions) }
+                .commitInterval(Duration.ZERO)
+        ).receiveAutoAck()
+            .concatMap { it }
+            .publish()
+            .autoConnect(0)
 
+    fun makeIntercomRequest(id: String, method: Method, args: Array<Any>): Mono<Any?> {
         return kafkaSender.send(Mono.just(UUID.randomUUID().toString() to id.hashCode())
             .map { (requestId, publisherId) -> SenderRecord.create(
                 ProducerRecord(
-                    "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_${publisherId}",
+                    "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_$publisherId",
                     requestId,
                     intercomMethodBundleSerializer.serialize(IntercomMethodBundle(
                         publisherId = publisherId,
@@ -75,13 +79,14 @@ class IntercomProviderBeanPostProcessor(
                 ),
                 requestId
             ) }
-        ).flatMap { kafkaReceiver.receive().firstMapWith(it.correlationMetadata()) }
+        ).flatMap { kafkaReceivers.getValue(id).firstMapWith(it.correlationMetadata()) }
             .map { (requestId, it) -> requestId to it }
             .filter { (requestId, record) -> requestId == record.key() }
-            .flatMap { (_, record) -> Mono.fromCallable {
-                record.receiverOffset().acknowledge()
-                record
-            } }
+            .map { (_, record) -> record }
+//            .flatMap { (_, record) -> Mono.fromCallable {
+//                record.receiverOffset().acknowledge()
+//                record
+//            } }
             .map { it.value() }
             .map { Optional.ofNullable(intercomReturnBundleSerializer.deserialize<Any>(it)) }
             .filter { it.isPresent }
@@ -97,9 +102,10 @@ class IntercomProviderBeanPostProcessor(
         val id = field.getAnnotation(ProvideIntercom::class.java)?.id
             ?: error("id is required in annotation @ProvideIntercom")
 
+        kafkaReceivers.putIfAbsent(id, bootstrapKafkaRequestReceiver(id))
         ReflectionUtils.makeAccessible(field)
         field.set(bean, Proxy.newProxyInstance(bean.javaClass.classLoader, arrayOf(field.type)) { _, method, args ->
-            return@newProxyInstance makeTcpConnectionMono(id, method, args)
+            return@newProxyInstance makeIntercomRequest(id, method, args)
                 .let {
                     when(method.returnType) {
                         Mono::class.java -> it

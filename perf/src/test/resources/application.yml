@@ -1,6 +1,6 @@
 logging:
   level:
-    eu.nk2.intercom: warn
+    eu.nk2.intercom: info
     org.apache.kafka: error
 
 intercom:

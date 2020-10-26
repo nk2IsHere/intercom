@@ -3,7 +3,7 @@ package eu.nk2.intercom.boot
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
-const val INTERCOM_KAFKA_STREAM_PROPERTIES_BEAN_ID = "INTERCOM_KAFKA_STREAM_PROPERTIES_BEAN_ID"
+const val INTERCOM_KAFKA_STREAM_PROPERTIES_BEAN_ID = "intercomKafkaStreamProperties"
 const val INTERCOM_KAFKA_TOPIC_PREFIX_KEY = "topicPrefix"
 const val INTERCOM_KAFKA_TOPIC_PARTITION_NUMBER_KEY = "partitionNumber"
 const val INTERCOM_KAFKA_TOPIC_REPLICATION_FACTOR_KEY = "replicationFactor"

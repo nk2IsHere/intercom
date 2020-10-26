@@ -32,6 +32,7 @@ import reactor.kafka.sender.SenderOptions
 import reactor.kafka.sender.SenderRecord
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
+import java.time.Duration
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
@@ -52,10 +53,12 @@ import java.util.concurrent.ConcurrentHashMap
     fun bootstrapResponseKafkaStream(publisherId: Int): Disposable =
         KafkaReceiver.create(
             ReceiverOptions.create<String, ByteArray>(kafkaStreamProperties + (ConsumerConfig.GROUP_ID_CONFIG to "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_${publisherId}"))
-                .subscription(listOf("${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_${publisherId}"))
-                .addAssignListener { partitions -> logger.debug("Intercom onPartitionsAssigned {}", partitions) }
-                .addRevokeListener { partitions -> logger.debug("Intercom onPartitionsRevoked {}", partitions) }
-        ).receiveAtmostOnce()
+                .subscription(listOf("${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_$publisherId"))
+                .addAssignListener { partitions -> logger.debug("Receiver $publisherId onPartitionsAssigned $partitions") }
+                .addRevokeListener { partitions -> logger.debug("Receiver $publisherId onPartitionsRevoked $partitions") }
+                .commitInterval(Duration.ZERO)
+        ).receiveAutoAck()
+            .concatMap { it }
             .map { record -> record.key() to record.value() }
             .map { (key, value) -> key to Optional.ofNullable(intercomMethodBundleSerializer.deserialize(value)) }
             .filter { (_, value) -> value.isPresent }
@@ -101,7 +104,7 @@ import java.util.concurrent.ConcurrentHashMap
             .flatMap { (key, value) ->
                 kafkaSender.send(Mono.just(SenderRecord.create(
                     ProducerRecord<String, ByteArray>(
-                        "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_response_${publisherId}",
+                        "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_response_$publisherId",
                         key, value
                     ),
                     key
@@ -113,8 +116,8 @@ import java.util.concurrent.ConcurrentHashMap
         AdminClient.create(kafkaStreamProperties)
             .createTopics(
                 intercomPublishers.flatMap { (publisherId, _) -> listOf(
-                    "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_${publisherId}",
-                    "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_response_${publisherId}"
+                    "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_$publisherId",
+                    "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_response_$publisherId"
                 ) }.map {
                     NewTopic(
                         it,
