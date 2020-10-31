@@ -25,6 +25,7 @@ import org.springframework.stereotype.Component
 import reactor.core.Disposable
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import reactor.core.scheduler.Schedulers
 import reactor.kafka.receiver.KafkaReceiver
 import reactor.kafka.receiver.ReceiverOptions
 import reactor.kafka.sender.KafkaSender
@@ -65,37 +66,35 @@ import java.util.concurrent.ConcurrentHashMap
             .map { (key, value) -> key to value.get() }
             .doOnNext { (_, value) -> logger.debug("Received from intercom client ${value.publisherId}.${value.methodId}()") }
             .flatMap<Pair<String, IntercomReturnBundle<Any?>>> { (key, value) ->
-                Mono.just(value)
-                    .flatMap<Optional<out Any>> {
-                        val publisherDefinition = intercomPublishers[value.publisherId]
-                            ?: return@flatMap Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_PUBLISHER))
+                run {
+                    val publisherDefinition = intercomPublishers[value.publisherId]
+                        ?: return@run Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_PUBLISHER))
 
-                        val (publisher, method) = publisherDefinition.first to (publisherDefinition.second[value.methodId]
-                            ?: return@flatMap Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_METHOD)))
+                    val (publisher, method) = publisherDefinition.first to (publisherDefinition.second[value.methodId]
+                        ?: return@run Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_METHOD)))
 
-                        if (method.parameterCount != value.parameters.size)
-                            return@flatMap Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_PARAMS))
+                    if (method.parameterCount != value.parameters.size)
+                        return@run Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_PARAMS))
 
-                        for ((index, parameter) in method.parameters.withIndex())
-                            if (ClassUtils.objectiveClass(parameter.type) != ClassUtils.objectiveClass(value.parameters[index].javaClass))
-                                return@flatMap Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_PARAMS))
+                    for ((index, parameter) in method.parameters.withIndex())
+                        if (ClassUtils.objectiveClass(parameter.type) != ClassUtils.objectiveClass(value.parameters[index].javaClass))
+                            return@run Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_PARAMS))
 
-                        return@flatMap try {
-                            when (method.returnType) {
-                                Mono::class.java -> (method.invoke(publisher, *value.parameters) as Mono<*>)
-                                Flux::class.java -> (method.invoke(publisher, *value.parameters) as Flux<*>).collectList()
-                                else -> Mono.error<Optional<Any>>(IntercomException(IntercomError.INTERNAL_ERROR))
-                            }.wrapOptional()
-                        } catch (e: Exception) {
-                            logger.debug("Error in handling intercom client", e)
-                            Mono.error<Optional<Any>>(IntercomException(when (e) {
-                                is IllegalArgumentException -> IntercomError.BAD_DATA
-                                is InvocationTargetException -> IntercomError.PROVIDER_ERROR
-                                else -> IntercomError.INTERNAL_ERROR
-                            }))
-                        }
+                    return@run try {
+                        when (method.returnType) {
+                            Mono::class.java -> (method.invoke(publisher, *value.parameters) as Mono<*>)
+                            Flux::class.java -> (method.invoke(publisher, *value.parameters) as Flux<*>).collectList()
+                            else -> Mono.error<Any>(IntercomException(IntercomError.INTERNAL_ERROR))
+                        }.wrapOptional()
+                    } catch (e: Exception) {
+                        logger.debug("Error in handling intercom client", e)
+                        Mono.error<Optional<Any>>(IntercomException(when (e) {
+                            is IllegalArgumentException -> IntercomError.BAD_DATA
+                            is InvocationTargetException -> IntercomError.PROVIDER_ERROR
+                            else -> IntercomError.INTERNAL_ERROR
+                        }))
                     }
-                    .map<IntercomReturnBundle<Any?>> { IntercomReturnBundle(error = null, data = it.orNull()) }
+                }.map<IntercomReturnBundle<Any?>> { IntercomReturnBundle(error = null, data = it.orNull()) }
                     .onErrorResume(IntercomException::class.java) { Mono.just(IntercomReturnBundle<Any?>(error = it.error, data = null)) }
                     .defaultIfEmpty(IntercomReturnBundle(error = IntercomError.NO_DATA, data = null))
                     .firstMapWith<IntercomReturnBundle<Any?>, String>(key)

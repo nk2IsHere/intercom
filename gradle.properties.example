@@ -1,0 +1,5 @@
+artifactory_contextUrl=https://repo.nk2.eu/artifactory
+artifactory_repoPublish=gradle-release-local
+artifactory_repoResolve=gradle-release
+artifactory_user=
+artifactory_password=
