@@ -6,6 +6,8 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.spring' version '1.3.72'
     id 'org.jetbrains.kotlin.jvm' version '1.3.72'
     id 'org.jetbrains.kotlin.plugin.noarg' version '1.3.72'
+    id 'maven-publish'
+    id 'com.jfrog.artifactory' version '4.16.0'
 }
 
 repositories {
@@ -26,15 +28,28 @@ def gitTag = { ->
     }
 }
 
-subprojects { subproject ->
-    subproject.apply plugin: 'org.springframework.boot'
-    subproject.apply plugin: 'io.spring.dependency-management'
-    subproject.apply plugin: 'org.jetbrains.kotlin.plugin.spring'
-    subproject.apply plugin: 'org.jetbrains.kotlin.jvm'
-    subproject.apply plugin: 'org.jetbrains.kotlin.plugin.noarg'
+def buildProjects = { ->
+    return subprojects.findAll { new File(it.projectDir, 'build.gradle').file  }
+}
+
+def internalProjects = { ->
+    return buildProjects().findAll { it.name.endsWith("-internal") || it.projectDir.path.substring(rootProject.projectDir.path.length()).contains('internal') }
+}
+
+def libraryProjects = { ->
+    return buildProjects().findAll { !internalProjects().contains(it)  }
+}
+
+configure(buildProjects()) {
+    apply plugin: 'com.jfrog.artifactory'
+    apply plugin: 'org.springframework.boot'
+    apply plugin: 'io.spring.dependency-management'
+    apply plugin: 'org.jetbrains.kotlin.plugin.spring'
+    apply plugin: 'org.jetbrains.kotlin.jvm'
+    apply plugin: 'org.jetbrains.kotlin.plugin.noarg'
 
     group = "eu.nk2"
-    version = gitTag()
+    version = gitTag().split("-").first() // Publisher does not support versions with -
     java.sourceCompatibility = JavaVersion.VERSION_11
 
     repositories {
@@ -64,11 +79,15 @@ subprojects { subproject ->
             jvmTarget = '1.8'
         }
     }
+}
+
+configure(libraryProjects()) {
+    apply plugin: 'maven-publish'
 
     jar {
         manifest {
             attributes(
-                'Project-Name': subproject,
+                'Project-Name': project.name,
                 'Version': gitTag(),
                 'Built-By': System.properties['user.name'],
                 'Build-Timestamp': new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").format(new Date()),
@@ -83,7 +102,7 @@ subprojects { subproject ->
         launchScript()
         manifest {
             attributes(
-                'Project-Name': subproject,
+                'Project-Name': project.name,
                 'Version': gitTag(),
                 'Built-By': System.properties['user.name'],
                 'Build-Timestamp': new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").format(new Date()),
@@ -91,6 +110,87 @@ subprojects { subproject ->
                 'Build-Jdk': "${System.properties['java.version']} (${System.properties['java.vendor']} ${System.properties['java.vm.version']})",
                 'Build-OS': "${System.properties['os.name']} ${System.properties['os.arch']} ${System.properties['os.version']}"
             )
+        }
+    }
+
+    task sourcesJar(type: Jar, dependsOn: classes) {
+        classifier = 'sources'
+        from sourceSets.main.allSource
+    }
+
+    task javadocJar(type: Jar, dependsOn: javadoc) {
+        classifier = 'javadoc'
+        from javadoc.destinationDir
+    }
+
+    artifacts {
+        archives sourcesJar
+//        file "$buildDir/libs/${project.name}-${project.version}.jar"
+    }
+
+    artifactory {
+        contextUrl = "${artifactory_contextUrl}"
+        publish {
+            repository {
+                repoKey = "${artifactory_repoPublish}"
+                username = "${artifactory_user}"
+                password = "${artifactory_password}"
+                maven = true
+            }
+            defaults {
+                publications('mavenJava')
+                publishBuildInfo = false
+            }
+        }
+    }
+
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                from components.java
+                artifact sourcesJar
+//                artifact "$buildDir/libs/${project.name}-${project.version}.jar"
+            }
+        }
+    }
+}
+
+allprojects {
+    apply plugin: 'eclipse'
+    apply plugin: 'idea'
+
+    eclipse {
+        classpath {
+            downloadSources = true
+        }
+    }
+
+    // Tell idea to output to build/classes/main instead of /out/
+    idea {
+        module {
+            outputDir file('build/classes/main')
+            testOutputDir file('build/classes/test')
+        }
+    }
+}
+
+artifactory {
+    contextUrl = "${artifactory_contextUrl}"
+    publish {
+        repository {
+            username = "${artifactory_user}"
+            password = "${artifactory_password}"
+        }
+        defaults {
+            publishArtifacts = false
+        }
+    }
+    resolve {
+        repository {
+            repoKey = "${artifactory_repoResolve}"
+            username = "${artifactory_user}"
+            password = "${artifactory_password}"
+            maven = true
         }
     }
 }
