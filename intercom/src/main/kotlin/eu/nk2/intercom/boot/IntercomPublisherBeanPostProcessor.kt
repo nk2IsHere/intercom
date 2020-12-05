@@ -53,7 +53,6 @@ class IntercomPublisherBeanPostProcessor(
 
                 channel
             }
-            .cache()
             .flatMapMany { channel ->
                 Flux.create<NTuple2<Channel, Delivery>> { sink ->
                     channel.basicConsume(
@@ -66,6 +65,8 @@ class IntercomPublisherBeanPostProcessor(
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnCancel { channel.close() }
             }
+            .publish()
+            .autoConnect(0)
             .map { (channel, delivery) -> channel then delivery.properties.replyTo then delivery.properties.correlationId then delivery.body }
             .map { (channel, replyKey, key, value) -> channel then replyKey then key then Optional.ofNullable(intercomMethodBundleSerializer.deserialize(value)) }
             .filter { (_, _, _, value) -> value.isPresent }
