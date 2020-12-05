@@ -1,57 +1,53 @@
 package eu.nk2.intercom.boot
 
+import com.rabbitmq.client.Connection
+import com.rabbitmq.client.ConnectionFactory
 import eu.nk2.intercom.DefaultIntercomMethodBundleSerializer
 import eu.nk2.intercom.DefaultIntercomReturnBundleSerializer
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.IntercomStarterMode
-import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.clients.producer.ProducerConfig
-import org.apache.kafka.common.serialization.*
+import org.springframework.amqp.core.AmqpAdmin
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
+import org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+import org.springframework.boot.autoconfigure.amqp.RabbitProperties
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.*
-
+import reactor.core.publisher.Mono
 
 @Configuration
+@Import(RabbitAutoConfiguration::class)
 @EnableConfigurationProperties(IntercomPropertiesConfiguration::class)
 @Conditional(IntercomAutoConfigurationEnabledCondition::class)
 class IntercomAutoConfiguration {
 
-    @Bean(INTERCOM_KAFKA_STREAM_PROPERTIES_BEAN_ID)
+    @Bean(INTERCOM_RABBIT_CONNECTION_BEAN_ID)
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
-    fun intercomKafkaStreamProperties(
-        @Autowired properties: IntercomPropertiesConfiguration
-    ): Map<String, Any> = mapOf(
-//        ProducerConfig.APPLICATION_ID_CONFIG to (properties.kafkaApplicationId ?: error("intercom.kafkaApplicationId is required")),
-        ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to (properties.kafkaBrokers ?: error("intercom.kafkaBrokers is required")),
-        ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
-        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to ByteArraySerializer::class.java,
-        ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
-        ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to ByteArrayDeserializer::class.java,
-//        ProducerConfig.ACKS_CONFIG to "0",
-//        ProducerConfig.RETRIES_CONFIG to "0",
-        ProducerConfig.ACKS_CONFIG to "all",
-
-        INTERCOM_KAFKA_TOPIC_PREFIX_KEY to (properties.kafkaTopicPrefix?: error("intercom.kafkaTopicPrefix is required")),
-        INTERCOM_KAFKA_TOPIC_PARTITION_NUMBER_KEY to (properties.kafkaPartitionNumber ?: error("intercom.kafkaPartitionNumber is required")),
-        INTERCOM_KAFKA_TOPIC_REPLICATION_FACTOR_KEY to (properties.kafkaReplicationFactor ?: error("intercom.kafkaReplicationFactor is required"))
-    )
-
+    fun intercomRabbitConnection(
+        @Autowired rabbitProperties: RabbitProperties
+    ): Mono<Connection> = Mono.fromCallable {
+        ConnectionFactory().apply {
+            host = rabbitProperties.determineHost()
+            port = rabbitProperties.determinePort()
+            username = rabbitProperties.determineUsername()
+            password = rabbitProperties.determinePassword()
+        }.newConnection()
+    }.cache()
 
     @Bean
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
     @Conditional(IntercomAutoConfigurationServerEnabledCondition::class)
     fun intercomPublisherBeanPostProcessor(
-        @Autowired @Qualifier(INTERCOM_KAFKA_STREAM_PROPERTIES_BEAN_ID) kafkaStreamProperties: Map<String, Any>,
+        @Autowired properties: IntercomPropertiesConfiguration,
+        @Autowired @Qualifier(INTERCOM_RABBIT_CONNECTION_BEAN_ID) rabbitConnection: Mono<Connection>,
         @Autowired intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
         @Autowired intercomReturnBundleSerializer: IntercomReturnBundleSerializer
     ): IntercomPublisherBeanPostProcessor =
         IntercomPublisherBeanPostProcessor(
-            kafkaStreamProperties = kafkaStreamProperties,
+            rabbitProperties = rabbitConnection to (properties.rabbitQueuePrefix?: error("intercom.rabbitQueuePrefix is required")),
             intercomMethodBundleSerializer = intercomMethodBundleSerializer,
             intercomReturnBundleSerializer = intercomReturnBundleSerializer
         )
@@ -61,12 +57,12 @@ class IntercomAutoConfiguration {
     @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
     fun intercomProviderBeanPostProcessor(
         @Autowired properties: IntercomPropertiesConfiguration,
-        @Autowired @Qualifier(INTERCOM_KAFKA_STREAM_PROPERTIES_BEAN_ID) kafkaStreamProperties: Map<String, Any>,
+        @Autowired @Qualifier(INTERCOM_RABBIT_CONNECTION_BEAN_ID) rabbitConnection: Mono<Connection>,
         @Autowired intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
         @Autowired intercomReturnBundleSerializer: IntercomReturnBundleSerializer
     ): IntercomProviderBeanPostProcessor =
         IntercomProviderBeanPostProcessor(
-            kafkaStreamProperties = kafkaStreamProperties,
+            rabbitProperties = rabbitConnection to (properties.rabbitQueuePrefix?: error("intercom.rabbitQueuePrefix is required")),
             intercomMethodBundleSerializer = intercomMethodBundleSerializer,
             intercomReturnBundleSerializer = intercomReturnBundleSerializer
         )

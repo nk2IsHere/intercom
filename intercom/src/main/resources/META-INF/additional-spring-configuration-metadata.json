@@ -7,33 +7,10 @@
       "defaultValue": "CLIENT_ONLY"
     },
     {
-      "name": "intercom.kafkaBrokers",
+      "name": "intercom.rabbitQueuePrefix",
       "type": "java.lang.String",
-      "description": "Intercom kafka broker instances."
-    },
-    {
-      "name": "intercom.kafkaApplicationId",
-      "type": "java.lang.String",
-      "description": "Intercom kafka server application id.",
-      "defaultValue": false
-    },
-    {
-      "name": "intercom.kafkaTopicPrefix",
-      "type": "java.lang.String",
-      "description": "Intercom kafka server topic prefix.",
-      "defaultValue": false
-    },
-    {
-      "name": "intercom.kafkaPartitionNumber",
-      "type": "java.lang.Integer",
-      "description": "Intercom kafka server topic parition number.",
-      "defaultValue": false
-    },
-    {
-      "name": "intercom.kafkaReplicationFactor",
-      "type": "java.lang.Short",
-      "description": "Intercom kafka server topic replication factor.",
-      "defaultValue": false
+      "description": "Intercom rabbitmq server queue prefix.",
+      "defaultValue": ""
     }
   ]
 }

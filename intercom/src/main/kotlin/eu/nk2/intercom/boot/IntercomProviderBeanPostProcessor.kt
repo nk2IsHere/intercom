@@ -1,5 +1,8 @@
 package eu.nk2.intercom.boot
 
+import com.rabbitmq.client.AMQP
+import com.rabbitmq.client.Channel
+import com.rabbitmq.client.Connection
 import eu.nk2.intercom.IntercomError
 import eu.nk2.intercom.IntercomException
 import eu.nk2.intercom.IntercomMethodBundle
@@ -7,87 +10,79 @@ import eu.nk2.intercom.IntercomReturnBundle
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.ProvideIntercom
-import eu.nk2.intercom.utils.firstMapWith
-import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.clients.consumer.ConsumerRecord
-import org.apache.kafka.clients.producer.ProducerRecord
+import eu.nk2.intercom.utils.*
+import eu.nk2.intercom.utils.NTuple3
+import eu.nk2.intercom.utils.asyncMap
+import eu.nk2.intercom.utils.then
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.context.event.ContextClosedEvent
 import org.springframework.context.event.ContextRefreshedEvent
 import org.springframework.context.event.EventListener
-import org.springframework.stereotype.Component
 import org.springframework.util.ReflectionUtils
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
-import reactor.kafka.receiver.KafkaReceiver
-import reactor.kafka.receiver.ReceiverOptions
-import reactor.kafka.receiver.ReceiverRecord
-import reactor.kafka.sender.KafkaSender
-import reactor.kafka.sender.SenderOptions
-import reactor.kafka.sender.SenderRecord
+import reactor.core.scheduler.Schedulers
 import reactor.kotlin.core.publisher.toMono
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
-import java.time.Duration
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
-@Component
 class IntercomProviderBeanPostProcessor(
-    private val kafkaStreamProperties: Map<String, Any>,
+    private val rabbitProperties: Pair<Mono<Connection>, String>,
     private val intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
     private val intercomReturnBundleSerializer: IntercomReturnBundleSerializer
 ): BeanPostProcessor {
     private val logger = LoggerFactory.getLogger(IntercomProviderBeanPostProcessor::class.java)
 
-    private lateinit var kafkaSender: KafkaSender<String, ByteArray>
-    private val kafkaReceivers: MutableMap<String, Flux<ConsumerRecord<String, ByteArray>>> = ConcurrentHashMap()
+    private lateinit var channel: Mono<Channel>
 
     @EventListener fun init(event: ContextRefreshedEvent) {
-        kafkaSender = KafkaSender.create(SenderOptions.create<String, ByteArray>(kafkaStreamProperties))
+        channel = rabbitProperties.first.asyncMap { it.createChannel() }
+            .cache()
     }
 
     @EventListener fun dispose(event: ContextClosedEvent) {
-        kafkaSender.close()
+        channel.block()?.close()
     }
 
-    fun bootstrapKafkaRequestReceiver(id: String) =
-        KafkaReceiver.create(
-            ReceiverOptions.create<String, ByteArray>(kafkaStreamProperties + (ConsumerConfig.GROUP_ID_CONFIG to UUID.randomUUID().toString()))
-                .subscription(listOf("${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_response_${id.hashCode()}"))
-                .addAssignListener { partitions -> logger.debug("Provider $id onPartitionsAssigned {}", partitions) }
-                .addRevokeListener { partitions -> logger.debug("Provider $id onPartitionsRevoked {}", partitions) }
-                .commitInterval(Duration.ZERO)
-        ).receiveAutoAck()
-            .concatMap { it }
-            .publish()
-            .autoConnect(0)
+    private fun makeIntercomRequest(id: String, method: Method, args: Array<Any>): Mono<Any?> =
+        channel.asyncMap {
+            val queue = it.queueDeclare().queue
+            val requestId = UUID.randomUUID().toString()
+            val publisherId = id.hashCode()
+            it.basicPublish(
+                "",
+                "${rabbitProperties.second}_request_$publisherId",
+                AMQP.BasicProperties.Builder()
+                    .correlationId(requestId)
+                    .replyTo(queue)
+                    .build(),
+                intercomMethodBundleSerializer.serialize(IntercomMethodBundle(
+                    publisherId = publisherId,
+                    methodId = method.name.hashCode() xor method.parameters.map { it.type.name }.hashCode(),
+                    parameters = args
+                ))
+            )
 
-    fun makeIntercomRequest(id: String, method: Method, args: Array<Any>): Mono<Any?> {
-        return kafkaSender.send(Mono.just(UUID.randomUUID().toString() to id.hashCode())
-            .map { (requestId, publisherId) -> SenderRecord.create(
-                ProducerRecord(
-                    "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_$publisherId",
-                    requestId,
-                    intercomMethodBundleSerializer.serialize(IntercomMethodBundle(
-                        publisherId = publisherId,
-                        methodId = method.name.hashCode() xor method.parameters.map { it.type.name }.hashCode(),
-                        parameters = args
-                    ))
-                ),
-                requestId
-            ) }
-        ).flatMap { kafkaReceivers.getValue(id).firstMapWith(it.correlationMetadata()) }
-            .map { (requestId, it) -> requestId to it }
-            .filter { (requestId, record) -> requestId == record.key() }
-            .map { (_, record) -> record }
-//            .flatMap { (_, record) -> Mono.fromCallable {
-//                record.receiverOffset().acknowledge()
-//                record
-//            } }
-            .map { it.value() }
+            it then requestId then queue
+        }.flatMapMany { (channel, requestId, queue) ->
+            Flux.create<NTuple4<Channel, String, Boolean, ByteArray>> { sink ->
+                channel.basicConsume(
+                    queue,
+                    true,
+                    { tag, delivery -> sink.next(channel then tag then (delivery.properties.correlationId == requestId) then delivery.body) },
+                    { tag -> sink.complete() }
+                )
+            }
+            .subscribeOn(Schedulers.boundedElastic())
+        }.filter { (_, _, isRelated, _) -> isRelated }
+            .asyncMap { (channel, tag, _, body) ->
+                channel.basicCancel(tag)
+                body
+            }
             .map { Optional.ofNullable(intercomReturnBundleSerializer.deserialize<Any>(it)) }
             .filter { it.isPresent }
             .map { it.get() }
@@ -95,14 +90,12 @@ class IntercomProviderBeanPostProcessor(
             .doOnNext { if(it.error != null) throw IntercomException(it.error) }
             .flatMap { it.data?.toMono() ?: Mono.empty() }
             .next()
-    }
 
     fun mapProviderField(bean: Any, beanName: String, field: Field) {
         logger.debug("Mapping $beanName's provider field to proxy")
         val id = field.getAnnotation(ProvideIntercom::class.java)?.id
             ?: error("id is required in annotation @ProvideIntercom")
 
-        kafkaReceivers.putIfAbsent(id, bootstrapKafkaRequestReceiver(id))
         ReflectionUtils.makeAccessible(field)
         field.set(bean, Proxy.newProxyInstance(bean.javaClass.classLoader, arrayOf(field.type)) { _, method, args ->
             return@newProxyInstance makeIntercomRequest(id, method, args)

@@ -1,5 +1,9 @@
 package eu.nk2.intercom.boot
 
+import com.rabbitmq.client.AMQP
+import com.rabbitmq.client.Channel
+import com.rabbitmq.client.Connection
+import com.rabbitmq.client.Delivery
 import eu.nk2.intercom.IntercomError
 import eu.nk2.intercom.IntercomException
 import eu.nk2.intercom.IntercomReturnBundle
@@ -7,13 +11,10 @@ import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.PublishIntercom
 import eu.nk2.intercom.utils.*
-import eu.nk2.intercom.utils.Unsafe.Companion.unsafe
 import eu.nk2.intercom.utils.wrapOptional
-import org.apache.kafka.clients.admin.AdminClient
-import org.apache.kafka.clients.admin.NewTopic
-import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.clients.producer.ProducerRecord
 import org.slf4j.LoggerFactory
+import org.springframework.amqp.core.AmqpAdmin
+import org.springframework.amqp.core.Queue
 import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.context.event.ContextClosedEvent
 import org.springframework.context.event.ContextRefreshedEvent
@@ -21,25 +22,18 @@ import org.springframework.context.event.EventListener
 import org.springframework.core.Ordered
 import org.springframework.core.PriorityOrdered
 import org.springframework.core.annotation.AnnotationUtils
-import org.springframework.stereotype.Component
 import reactor.core.Disposable
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
-import reactor.kafka.receiver.KafkaReceiver
-import reactor.kafka.receiver.ReceiverOptions
-import reactor.kafka.sender.KafkaSender
-import reactor.kafka.sender.SenderOptions
-import reactor.kafka.sender.SenderRecord
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
-import java.time.Duration
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
 
-@Component class IntercomPublisherBeanPostProcessor(
-    private val kafkaStreamProperties: Map<String, Any>,
+class IntercomPublisherBeanPostProcessor(
+    private val rabbitProperties: Pair<Mono<Connection>, String>,
     private val intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
     private val intercomReturnBundleSerializer: IntercomReturnBundleSerializer
 ): BeanPostProcessor, PriorityOrdered {
@@ -48,24 +42,36 @@ import java.util.concurrent.ConcurrentHashMap
     private val intercomPublisherAwareBeans = hashMapOf<String, Class<*>>()
     private val intercomPublishers: MutableMap<Int, Pair<Any, Map<Int, Method>>> = ConcurrentHashMap()
 
-    private lateinit var kafkaSender: KafkaSender<String, ByteArray>
-    private lateinit var kafkaStreamInstances: MutableList<Disposable>
+    private lateinit var receivers: MutableList<Disposable>
 
     fun bootstrapResponseKafkaStream(publisherId: Int): Disposable =
-        KafkaReceiver.create(
-            ReceiverOptions.create<String, ByteArray>(kafkaStreamProperties + (ConsumerConfig.GROUP_ID_CONFIG to "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_${publisherId}"))
-                .subscription(listOf("${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_$publisherId"))
-                .addAssignListener { partitions -> logger.debug("Receiver $publisherId onPartitionsAssigned $partitions") }
-                .addRevokeListener { partitions -> logger.debug("Receiver $publisherId onPartitionsRevoked $partitions") }
-                .commitInterval(Duration.ZERO)
-        ).receiveAutoAck()
-            .concatMap { it }
-            .map { record -> record.key() to record.value() }
-            .map { (key, value) -> key to Optional.ofNullable(intercomMethodBundleSerializer.deserialize(value)) }
-            .filter { (_, value) -> value.isPresent }
-            .map { (key, value) -> key to value.get() }
-            .doOnNext { (_, value) -> logger.debug("Received from intercom client ${value.publisherId}.${value.methodId}()") }
-            .flatMap<Pair<String, IntercomReturnBundle<Any?>>> { (key, value) ->
+        rabbitProperties.first
+            .asyncMap {
+                val channel = it.createChannel()
+                channel.queueDeclare("${rabbitProperties.second}_request_$publisherId", false, false, true, null)
+                channel.basicQos(1)
+
+                channel
+            }
+            .cache()
+            .flatMapMany { channel ->
+                Flux.create<NTuple2<Channel, Delivery>> { sink ->
+                    channel.basicConsume(
+                        "${rabbitProperties.second}_request_$publisherId",
+                        true,
+                        { tag, delivery -> sink.next(channel then delivery) },
+                        { tag -> sink.complete() }
+                    )
+                }
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnCancel { channel.close() }
+            }
+            .map { (channel, delivery) -> channel then delivery.properties.replyTo then delivery.properties.correlationId then delivery.body }
+            .map { (channel, replyKey, key, value) -> channel then replyKey then key then Optional.ofNullable(intercomMethodBundleSerializer.deserialize(value)) }
+            .filter { (_, _, _, value) -> value.isPresent }
+            .map { (channel, replyKey, key, value) -> channel then replyKey then key then value.get() }
+            .doOnNext { (_, _, _, value) -> logger.debug("Received from intercom client ${value.publisherId}.${value.methodId}()") }
+            .flatMap<NTuple4<Channel, String, String, IntercomReturnBundle<Any?>>> { (channel, replyKey, key, value) ->
                 run {
                     val publisherDefinition = intercomPublishers[value.publisherId]
                         ?: return@run Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_PUBLISHER))
@@ -97,47 +103,28 @@ import java.util.concurrent.ConcurrentHashMap
                 }.map<IntercomReturnBundle<Any?>> { IntercomReturnBundle(error = null, data = it.orNull()) }
                     .onErrorResume(IntercomException::class.java) { Mono.just(IntercomReturnBundle<Any?>(error = it.error, data = null)) }
                     .defaultIfEmpty(IntercomReturnBundle(error = IntercomError.NO_DATA, data = null))
-                    .firstMapWith<IntercomReturnBundle<Any?>, String>(key)
+                    .map { channel then replyKey then key then it }
             }
-            .map { (key, value) -> key to intercomReturnBundleSerializer.serialize(value) }
-            .flatMap { (key, value) ->
-                kafkaSender.send(Mono.just(SenderRecord.create(
-                    ProducerRecord<String, ByteArray>(
-                        "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_response_$publisherId",
-                        key, value
-                    ),
-                    key
-                )))
+            .map { (channel, replyKey, key, value) -> channel then replyKey then key then intercomReturnBundleSerializer.serialize(value) }
+            .asyncMap { (channel, replyKey, key, value) ->
+                channel.basicPublish(
+                    "",
+                    replyKey,
+                    AMQP.BasicProperties.Builder()
+                        .correlationId(key)
+                        .build(),
+                    value
+                )
             }
             .subscribe()
 
     @EventListener fun init(event: ContextRefreshedEvent) {
-        AdminClient.create(kafkaStreamProperties)
-            .createTopics(
-                intercomPublishers.flatMap { (publisherId, _) -> listOf(
-                    "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_request_$publisherId",
-                    "${kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PREFIX_KEY]}_response_$publisherId"
-                ) }.map {
-                    NewTopic(
-                        it,
-                        kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_PARTITION_NUMBER_KEY] as Int,
-                        kafkaStreamProperties[INTERCOM_KAFKA_TOPIC_REPLICATION_FACTOR_KEY] as Short
-                    )
-                }
-            )
-            .values()
-            .forEach { unsafe {
-                danger { it.value.get() }
-            } }
-
-        kafkaSender = KafkaSender.create(SenderOptions.create<String, ByteArray>(kafkaStreamProperties))
-        kafkaStreamInstances = intercomPublishers.map { (publisherId, _) -> bootstrapResponseKafkaStream(publisherId) }
+        receivers = intercomPublishers.map { (publisherId, _) -> bootstrapResponseKafkaStream(publisherId) }
             .toMutableList()
     }
 
     @EventListener fun dispose(event: ContextClosedEvent) {
-        kafkaStreamInstances.forEach { it.dispose() }
-        kafkaSender.close()
+        receivers.forEach { it.dispose() }
     }
 
     override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any? =

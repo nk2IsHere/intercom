@@ -1,12 +1,11 @@
 logging:
   level:
     eu.nk2.intercom: debug
-    org.apache.kafka: error
 
 intercom:
   starter-mode: CLIENT_SERVER
-  kafka-brokers: localhost:9092
-  kafka-application-id: "intercom-test"
-  kafka-topic-prefix: "intercom-test-topic-"
-  kafka-partition-number: 3
-  kafka-replication-factor: 3
+  rabbit-queue-prefix: "ic-test-"
+
+spring:
+  rabbitmq:
+    host: localhost

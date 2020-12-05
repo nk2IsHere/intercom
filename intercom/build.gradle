@@ -2,7 +2,7 @@
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter'
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-	implementation 'io.projectreactor.kafka:reactor-kafka'
+	implementation 'org.springframework.amqp:spring-rabbit'
 
 	implementation 'io.projectreactor:reactor-core'
 	implementation 'io.projectreactor.kotlin:reactor-kotlin-extensions'
