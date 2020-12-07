@@ -4,16 +4,21 @@ import java.io.Serializable
 
 class IntercomException(val error: IntercomError): Exception("$error: ${error.message}")
 
-enum class IntercomError(val message: String): Serializable {
-    NO_DATA("Server received no data"),
-    BAD_DATA("Server received bad data"),
-    BAD_PUBLISHER("Server received bad publisher - it cannot be found"),
-    BAD_METHOD("Server received bad method - it cannot be found"),
-    BAD_PARAMS("Server received bad parameters - args count or types mismatch"),
-    PROVIDER_ERROR("Server produced provider error - check logs"),
-    INTERNAL_ERROR("Server received internal error - check logs and mentally punch the author");
-
+sealed class IntercomError(val message: String): Serializable {
     companion object {
         private const val serialVersionUID = 20200721001507L
     }
 }
+
+sealed class IntercomThrowableAwareError(message: String, val throwable: Throwable): IntercomError(message)
+
+object NoDataIntercomError: IntercomError("Server received no data")
+object BadDataIntercomError: IntercomError("Server received bad data")
+object BadPublisherIntercomError :IntercomError("Server received bad publisher - it cannot be found")
+object BadMethodIntercomError: IntercomError("Server received bad method - it cannot be found")
+object BadParamsIntercomError: IntercomError("Server received bad parameters - args count or types mismatch")
+object BadMethodReturnTypeIntercomError: IntercomError("Server has a bad method - it is not reactive")
+class ProviderIntercomError(throwable: Throwable): IntercomThrowableAwareError("Server produced provider error - check logs", throwable)
+class InternalIntercomError(throwable: Throwable): IntercomThrowableAwareError("Server received internal error - check logs and mentally punch the author", throwable)
+
+object ClientNoDataIntercomError: IntercomError("Client received no data")

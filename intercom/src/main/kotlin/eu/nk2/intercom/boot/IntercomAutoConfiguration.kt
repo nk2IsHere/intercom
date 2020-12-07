@@ -47,7 +47,7 @@ class IntercomAutoConfiguration {
         @Autowired intercomReturnBundleSerializer: IntercomReturnBundleSerializer
     ): IntercomPublisherBeanPostProcessor =
         IntercomPublisherBeanPostProcessor(
-            rabbitProperties = rabbitConnection to (properties.rabbitQueuePrefix?: error("intercom.rabbitQueuePrefix is required")),
+            rabbitProperties = rabbitConnection to (properties.rabbitQueuePrefix?: INTERCOM_DEFAULT_RABBIT_QUEUE_PREFIX),
             intercomMethodBundleSerializer = intercomMethodBundleSerializer,
             intercomReturnBundleSerializer = intercomReturnBundleSerializer
         )
@@ -62,7 +62,7 @@ class IntercomAutoConfiguration {
         @Autowired intercomReturnBundleSerializer: IntercomReturnBundleSerializer
     ): IntercomProviderBeanPostProcessor =
         IntercomProviderBeanPostProcessor(
-            rabbitProperties = rabbitConnection to (properties.rabbitQueuePrefix?: error("intercom.rabbitQueuePrefix is required")),
+            rabbitProperties = rabbitConnection to (properties.rabbitQueuePrefix?: INTERCOM_DEFAULT_RABBIT_QUEUE_PREFIX),
             intercomMethodBundleSerializer = intercomMethodBundleSerializer,
             intercomReturnBundleSerializer = intercomReturnBundleSerializer
         )

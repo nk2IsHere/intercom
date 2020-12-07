@@ -10,7 +10,7 @@
       "name": "intercom.rabbitQueuePrefix",
       "type": "java.lang.String",
       "description": "Intercom rabbitmq server queue prefix.",
-      "defaultValue": ""
+      "defaultValue": "ic"
     }
   ]
 }

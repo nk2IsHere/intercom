@@ -4,9 +4,7 @@ import com.rabbitmq.client.AMQP
 import com.rabbitmq.client.Channel
 import com.rabbitmq.client.Connection
 import com.rabbitmq.client.Delivery
-import eu.nk2.intercom.IntercomError
-import eu.nk2.intercom.IntercomException
-import eu.nk2.intercom.IntercomReturnBundle
+import eu.nk2.intercom.*
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.PublishIntercom
@@ -75,35 +73,38 @@ class IntercomPublisherBeanPostProcessor(
             .flatMap<NTuple4<Channel, String, String, IntercomReturnBundle<Any?>>> { (channel, replyKey, key, value) ->
                 run {
                     val publisherDefinition = intercomPublishers[value.publisherId]
-                        ?: return@run Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_PUBLISHER))
+                        ?: return@run Mono.error<Optional<Any>>(IntercomException(BadPublisherIntercomError))
 
                     val (publisher, method) = publisherDefinition.first to (publisherDefinition.second[value.methodId]
-                        ?: return@run Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_METHOD)))
+                        ?: return@run Mono.error<Optional<Any>>(IntercomException(BadMethodIntercomError)))
 
                     if (method.parameterCount != value.parameters.size)
-                        return@run Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_PARAMS))
+                        return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError))
 
                     for ((index, parameter) in method.parameters.withIndex())
                         if (ClassUtils.objectiveClass(parameter.type) != ClassUtils.objectiveClass(value.parameters[index].javaClass))
-                            return@run Mono.error<Optional<Any>>(IntercomException(IntercomError.BAD_PARAMS))
+                            return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError))
 
                     return@run try {
                         when (method.returnType) {
                             Mono::class.java -> (method.invoke(publisher, *value.parameters) as Mono<*>)
-                            Flux::class.java -> (method.invoke(publisher, *value.parameters) as Flux<*>).collectList()
-                            else -> Mono.error<Any>(IntercomException(IntercomError.INTERNAL_ERROR))
+                                .onErrorResume { Mono.error(IntercomException(ProviderIntercomError(it))) }
+                            Flux::class.java -> (method.invoke(publisher, *value.parameters) as Flux<*>)
+                                .onErrorResume { Mono.error(IntercomException(ProviderIntercomError(it))) }
+                                .collectList()
+                            else -> Mono.error<Any>(IntercomException(BadMethodReturnTypeIntercomError))
                         }.wrapOptional()
                     } catch (e: Exception) {
                         logger.debug("Error in handling intercom client", e)
                         Mono.error<Optional<Any>>(IntercomException(when (e) {
-                            is IllegalArgumentException -> IntercomError.BAD_DATA
-                            is InvocationTargetException -> IntercomError.PROVIDER_ERROR
-                            else -> IntercomError.INTERNAL_ERROR
+                            is IllegalArgumentException -> BadDataIntercomError
+                            is InvocationTargetException -> ProviderIntercomError(e)
+                            else -> InternalIntercomError(e)
                         }))
                     }
                 }.map<IntercomReturnBundle<Any?>> { IntercomReturnBundle(error = null, data = it.orNull()) }
                     .onErrorResume(IntercomException::class.java) { Mono.just(IntercomReturnBundle<Any?>(error = it.error, data = null)) }
-                    .defaultIfEmpty(IntercomReturnBundle(error = IntercomError.NO_DATA, data = null))
+                    .defaultIfEmpty(IntercomReturnBundle(error = NoDataIntercomError, data = null))
                     .map { channel then replyKey then key then it }
             }
             .map { (channel, replyKey, key, value) -> channel then replyKey then key then intercomReturnBundleSerializer.serialize(value) }

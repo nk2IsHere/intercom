@@ -3,10 +3,7 @@ package eu.nk2.intercom.boot
 import com.rabbitmq.client.AMQP
 import com.rabbitmq.client.Channel
 import com.rabbitmq.client.Connection
-import eu.nk2.intercom.IntercomError
-import eu.nk2.intercom.IntercomException
-import eu.nk2.intercom.IntercomMethodBundle
-import eu.nk2.intercom.IntercomReturnBundle
+import eu.nk2.intercom.*
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.ProvideIntercom
@@ -24,6 +21,7 @@ import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
 import reactor.kotlin.core.publisher.toMono
+import java.lang.NullPointerException
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
@@ -86,10 +84,15 @@ class IntercomProviderBeanPostProcessor(
             .map { Optional.ofNullable(intercomReturnBundleSerializer.deserialize<Any>(it)) }
             .filter { it.isPresent }
             .map { it.get() }
-            .defaultIfEmpty(IntercomReturnBundle(error = IntercomError.INTERNAL_ERROR, data = null))
-            .doOnNext { if(it.error != null) throw IntercomException(it.error) }
-            .flatMap { it.data?.toMono() ?: Mono.empty() }
+            .defaultIfEmpty(IntercomReturnBundle(error = ClientNoDataIntercomError, data = null))
             .next()
+            .flatMap {
+                if(it.error != null) Mono.error(when(it.error) {
+                    is IntercomThrowableAwareError -> it.error.throwable
+                    else -> IntercomException(it.error)
+                })
+                else Mono.justOrEmpty(it.data)
+            }
 
     fun mapProviderField(bean: Any, beanName: String, field: Field) {
         logger.debug("Mapping $beanName's provider field to proxy")
@@ -98,7 +101,7 @@ class IntercomProviderBeanPostProcessor(
 
         ReflectionUtils.makeAccessible(field)
         field.set(bean, Proxy.newProxyInstance(bean.javaClass.classLoader, arrayOf(field.type)) { _, method, args ->
-            return@newProxyInstance makeIntercomRequest(id, method, args)
+            return@newProxyInstance makeIntercomRequest(id, method, args ?: arrayOf())
                 .let {
                     when(method.returnType) {
                         Mono::class.java -> it
@@ -109,7 +112,7 @@ class IntercomProviderBeanPostProcessor(
         })
     }
 
-    override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any? {
+    override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any {
         return bean.apply {
             ReflectionUtils.doWithFields(
                 bean.javaClass,

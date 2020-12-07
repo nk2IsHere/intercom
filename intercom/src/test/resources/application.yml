@@ -4,7 +4,7 @@ logging:
 
 intercom:
   starter-mode: CLIENT_SERVER
-  rabbit-queue-prefix: "ic-test-"
+#  rabbit-queue-prefix: "ic-test-"
 
 spring:
   rabbitmq:
