@@ -11,8 +11,6 @@ import eu.nk2.intercom.api.PublishIntercom
 import eu.nk2.intercom.utils.*
 import eu.nk2.intercom.utils.wrapOptional
 import org.slf4j.LoggerFactory
-import org.springframework.amqp.core.AmqpAdmin
-import org.springframework.amqp.core.Queue
 import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.context.event.ContextClosedEvent
 import org.springframework.context.event.ContextRefreshedEvent
@@ -35,18 +33,18 @@ class IntercomPublisherBeanPostProcessor(
     private val intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
     private val intercomReturnBundleSerializer: IntercomReturnBundleSerializer
 ): BeanPostProcessor, PriorityOrdered {
-    private val logger = LoggerFactory.getLogger(IntercomPublisherBeanPostProcessor::class.java)
+    private val log = LoggerFactory.getLogger(IntercomPublisherBeanPostProcessor::class.java)
 
     private val intercomPublisherAwareBeans = hashMapOf<String, Class<*>>()
     private val intercomPublishers: MutableMap<Int, Pair<Any, Map<Int, Method>>> = ConcurrentHashMap()
 
-    private lateinit var receivers: MutableList<Disposable>
+    private lateinit var receivers: List<Disposable>
 
-    fun bootstrapResponseKafkaStream(publisherId: Int): Disposable =
+    private fun bootstrapResponseKafkaStream(publisherId: Int): Disposable =
         rabbitProperties.first
             .asyncMap {
                 val channel = it.createChannel()
-                channel.queueDeclare("${rabbitProperties.second}_request_$publisherId", false, false, true, null)
+                channel.queueDeclare("${rabbitProperties.second}:$publisherId", false, false, true, null)
                 channel.basicQos(1)
 
                 channel
@@ -54,10 +52,10 @@ class IntercomPublisherBeanPostProcessor(
             .flatMapMany { channel ->
                 Flux.create<NTuple2<Channel, Delivery>> { sink ->
                     channel.basicConsume(
-                        "${rabbitProperties.second}_request_$publisherId",
+                        "${rabbitProperties.second}:$publisherId",
                         true,
-                        { tag, delivery -> sink.next(channel then delivery) },
-                        { tag -> sink.complete() }
+                        { _, delivery -> sink.next(channel then delivery) },
+                        { _ -> sink.complete() }
                     )
                 }
                 .subscribeOn(Schedulers.boundedElastic())
@@ -69,7 +67,7 @@ class IntercomPublisherBeanPostProcessor(
             .map { (channel, replyKey, key, value) -> channel then replyKey then key then Optional.ofNullable(intercomMethodBundleSerializer.deserialize(value)) }
             .filter { (_, _, _, value) -> value.isPresent }
             .map { (channel, replyKey, key, value) -> channel then replyKey then key then value.get() }
-            .doOnNext { (_, _, _, value) -> logger.debug("Received from intercom client ${value.publisherId}.${value.methodId}()") }
+            .doOnNext { (_, _, _, value) -> log.debug("Received from intercom client ${value.publisherId}.${value.methodId}()") }
             .flatMap<NTuple4<Channel, String, String, IntercomReturnBundle<Any?>>> { (channel, replyKey, key, value) ->
                 run {
                     val publisherDefinition = intercomPublishers[value.publisherId]
@@ -95,7 +93,7 @@ class IntercomPublisherBeanPostProcessor(
                             else -> Mono.error<Any>(IntercomException(BadMethodReturnTypeIntercomError))
                         }.wrapOptional()
                     } catch (e: Exception) {
-                        logger.debug("Error in handling intercom client", e)
+                        log.debug("Error in handling intercom client", e)
                         Mono.error<Optional<Any>>(IntercomException(when (e) {
                             is IllegalArgumentException -> BadDataIntercomError
                             is InvocationTargetException -> ProviderIntercomError(e)
@@ -122,7 +120,7 @@ class IntercomPublisherBeanPostProcessor(
 
     @EventListener fun init(event: ContextRefreshedEvent) {
         receivers = intercomPublishers.map { (publisherId, _) -> bootstrapResponseKafkaStream(publisherId) }
-            .toMutableList()
+            .toList()
     }
 
     @EventListener fun dispose(event: ContextClosedEvent) {
@@ -150,7 +148,7 @@ class IntercomPublisherBeanPostProcessor(
                 .filter { method -> INTERCOM_ALLOWED_GENERIC_METHOD_RETURN_TYPES.any { it.isAssignableFrom(method.returnType) } }
                 .map { it.name.hashCode() xor it.parameters.map { it.type.name }.hashCode() to it }
                 .toMap())
-            logger.debug("Mapped publisher $id to registry")
+            log.debug("Mapped publisher $id to registry")
         }
 
         return super.postProcessAfterInitialization(bean, beanName)

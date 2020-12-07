@@ -1,12 +1,12 @@
 package eu.nk2.intercom.boot
 
 import eu.nk2.intercom.IntercomStarterMode
-import eu.nk2.intercom.utils.NoArg
+import eu.nk2.intercom.utils.NoArgsConstructor
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.ConstructorBinding
 import org.springframework.stereotype.Component
 
-@NoArg
+@NoArgsConstructor
 @ConstructorBinding
 @Component
 @ConfigurationProperties(prefix = INTERCOM_PROPERTIES_PREFIX)

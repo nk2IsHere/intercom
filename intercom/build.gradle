@@ -18,7 +18,7 @@ dependencies {
 }
 
 noArg {
-	annotation("eu.nk2.intercom.utils.NoArg")
+	annotation("eu.nk2.intercom.utils.NoArgsConstructor")
 }
 
 bootJar.enabled = false

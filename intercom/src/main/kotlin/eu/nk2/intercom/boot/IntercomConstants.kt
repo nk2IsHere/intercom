@@ -1,12 +1,13 @@
 package eu.nk2.intercom.boot
 
 import eu.nk2.intercom.IntercomStarterMode
+import org.reactivestreams.Publisher
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
 const val INTERCOM_RABBIT_CONNECTION_BEAN_ID = "intercomRabbitConnection"
 
-internal val INTERCOM_ALLOWED_GENERIC_METHOD_RETURN_TYPES = arrayOf(Mono::class.java, Flux::class.java)
+internal val INTERCOM_ALLOWED_GENERIC_METHOD_RETURN_TYPES = arrayOf(Mono::class.java, Flux::class.java, Publisher::class.java)
 
 internal const val INTERCOM_PROPERTIES_PREFIX = "intercom"
 

@@ -8,7 +8,6 @@ import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.api.ProvideIntercom
 import eu.nk2.intercom.utils.*
-import eu.nk2.intercom.utils.NTuple3
 import eu.nk2.intercom.utils.asyncMap
 import eu.nk2.intercom.utils.then
 import org.slf4j.LoggerFactory
@@ -20,20 +19,17 @@ import org.springframework.util.ReflectionUtils
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
-import reactor.kotlin.core.publisher.toMono
-import java.lang.NullPointerException
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.util.*
-import java.util.concurrent.ConcurrentHashMap
 
 class IntercomProviderBeanPostProcessor(
     private val rabbitProperties: Pair<Mono<Connection>, String>,
     private val intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
     private val intercomReturnBundleSerializer: IntercomReturnBundleSerializer
 ): BeanPostProcessor {
-    private val logger = LoggerFactory.getLogger(IntercomProviderBeanPostProcessor::class.java)
+    private val log = LoggerFactory.getLogger(IntercomProviderBeanPostProcessor::class.java)
 
     private lateinit var channel: Mono<Channel>
 
@@ -53,7 +49,7 @@ class IntercomProviderBeanPostProcessor(
             val publisherId = id.hashCode()
             it.basicPublish(
                 "",
-                "${rabbitProperties.second}_request_$publisherId",
+                "${rabbitProperties.second}:$publisherId",
                 AMQP.BasicProperties.Builder()
                     .correlationId(requestId)
                     .replyTo(queue)
@@ -72,7 +68,7 @@ class IntercomProviderBeanPostProcessor(
                     queue,
                     true,
                     { tag, delivery -> sink.next(channel then tag then (delivery.properties.correlationId == requestId) then delivery.body) },
-                    { tag -> sink.complete() }
+                    { _ -> sink.complete() }
                 )
             }
             .subscribeOn(Schedulers.boundedElastic())
@@ -94,8 +90,8 @@ class IntercomProviderBeanPostProcessor(
                 else Mono.justOrEmpty(it.data)
             }
 
-    fun mapProviderField(bean: Any, beanName: String, field: Field) {
-        logger.debug("Mapping $beanName's provider field to proxy")
+    private fun mapProviderField(bean: Any, beanName: String, field: Field) {
+        log.debug("Mapping $beanName's provider field ${field.name} to proxy")
         val id = field.getAnnotation(ProvideIntercom::class.java)?.id
             ?: error("id is required in annotation @ProvideIntercom")
 
@@ -106,23 +102,18 @@ class IntercomProviderBeanPostProcessor(
                     when(method.returnType) {
                         Mono::class.java -> it
                         Flux::class.java -> it.flatMapMany { Flux.fromIterable(it as List<*>) }
-                        else -> error("Unknown error")
+                        else -> error("Impossible situation: return type of intercomRequest is not Publisher")
                     }
                 }
         })
     }
 
-    override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any {
-        return bean.apply {
+    override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any =
+         bean.apply {
             ReflectionUtils.doWithFields(
                 bean.javaClass,
                 { field -> mapProviderField(bean, beanName, field) },
                 { field -> field.isAnnotationPresent(ProvideIntercom::class.java) }
             )
         }
-    }
-
-    override fun postProcessAfterInitialization(bean: Any, beanName: String): Any? {
-        return super.postProcessAfterInitialization(bean, beanName)
-    }
 }

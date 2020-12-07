@@ -18,7 +18,7 @@ internal fun <T, R> Flux<T>.asyncMap(mapper: (T) -> R): Flux<R> =
     }
 
 internal fun <T> Mono<T>.wrapOptional(): Mono<Optional<T>> =
-    this.map { Optional.of(it) }
+    this.map { Optional.ofNullable(it) }
         .defaultIfEmpty(Optional.empty())
 
 internal fun <T> Optional<T>.orNull(): T? =
