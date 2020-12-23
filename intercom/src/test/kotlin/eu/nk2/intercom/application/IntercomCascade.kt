@@ -2,6 +2,8 @@ package eu.nk2.intercom.application
 
 import eu.nk2.intercom.api.PublishIntercom
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.ApplicationContext
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
@@ -85,7 +87,9 @@ interface TestExceptionalInterface {
 }
 
 @PublishIntercom(id = TEST_EXCEPTIONAL_INTERFACE_ID)
-class TestExceptionalInterfaceImpl: TestExceptionalInterface {
+class TestExceptionalInterfaceImpl(
+    @Autowired private val context: ApplicationContext
+): TestExceptionalInterface {
 
     override fun emptyResultMono(): Mono<String> =
         Mono.empty()

@@ -127,15 +127,10 @@ class IntercomPublisherBeanPostProcessor(
         receivers.forEach { it.dispose() }
     }
 
-    override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any? =
+    override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any =
         bean.apply {
-            if (AnnotationUtils.getAnnotation(bean.javaClass, PublishIntercom::class.java) != null) {
-                if(bean.javaClass.constructors.none { it.parameters.isEmpty() })
-                    error("Classes that contain methods annotated with @PublishIntercom must contain empty constructor, " +
-                        "please look at the implementation of ${bean.javaClass.name}")
-
+            if (AnnotationUtils.getAnnotation(bean.javaClass, PublishIntercom::class.java) != null)
                 intercomPublisherAwareBeans[beanName] = this.javaClass
-            }
         }
 
     override fun postProcessAfterInitialization(bean: Any, beanName: String): Any? {
