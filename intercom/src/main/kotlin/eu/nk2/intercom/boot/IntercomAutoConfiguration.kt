@@ -84,7 +84,7 @@ class IntercomAutoConfiguration {
 
 internal class IntercomAutoConfigurationEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
     INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
-    { IntercomStarterMode.valueOf(it) },
+    { IntercomStarterMode.valueOf(it.toUpperCase()) },
     listOf(
         null,
         IntercomStarterMode.CLIENT_ONLY,
@@ -95,12 +95,12 @@ internal class IntercomAutoConfigurationEnabledCondition: IntercomPropertyCondit
 
 internal class IntercomAutoConfigurationServerEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
     INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
-    { IntercomStarterMode.valueOf(it) },
+    { IntercomStarterMode.valueOf(it.toUpperCase()) },
     listOf(IntercomStarterMode.SERVER_ONLY, IntercomStarterMode.CLIENT_SERVER)
 )
 
 internal class IntercomAutoConfigurationClientEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
     INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
-    { IntercomStarterMode.valueOf(it) },
+    { IntercomStarterMode.valueOf(it.toUpperCase()) },
     listOf(null, IntercomStarterMode.CLIENT_ONLY, IntercomStarterMode.CLIENT_SERVER)
 )
