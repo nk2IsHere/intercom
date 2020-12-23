@@ -15,6 +15,8 @@ import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.context.event.ContextClosedEvent
 import org.springframework.context.event.ContextRefreshedEvent
 import org.springframework.context.event.EventListener
+import org.springframework.core.Ordered
+import org.springframework.core.annotation.Order
 import org.springframework.util.ReflectionUtils
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -33,12 +35,12 @@ class IntercomProviderBeanPostProcessor(
 
     private var channel: Mono<Channel>? = null
 
-    @EventListener fun init(event: ContextRefreshedEvent) {
+    @Order(Ordered.HIGHEST_PRECEDENCE) @EventListener fun init(event: ContextRefreshedEvent) {
         channel = rabbitProperties.first.asyncMap { it.createChannel() }
             .cache()
     }
 
-    @EventListener fun dispose(event: ContextClosedEvent) {
+    @Order(Ordered.LOWEST_PRECEDENCE) @EventListener fun dispose(event: ContextClosedEvent) {
         channel?.block()?.close()
     }
 

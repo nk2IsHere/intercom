@@ -18,6 +18,7 @@ import org.springframework.context.event.EventListener
 import org.springframework.core.Ordered
 import org.springframework.core.PriorityOrdered
 import org.springframework.core.annotation.AnnotationUtils
+import org.springframework.core.annotation.Order
 import reactor.core.Disposable
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -118,12 +119,12 @@ class IntercomPublisherBeanPostProcessor(
             }
             .subscribe()
 
-    @EventListener fun init(event: ContextRefreshedEvent) {
+    @Order(Ordered.HIGHEST_PRECEDENCE) @EventListener fun init(event: ContextRefreshedEvent) {
         receivers = intercomPublishers.map { (publisherId, _) -> bootstrapResponseKafkaStream(publisherId) }
             .toList()
     }
 
-    @EventListener fun dispose(event: ContextClosedEvent) {
+    @Order(Ordered.LOWEST_PRECEDENCE) @EventListener fun dispose(event: ContextClosedEvent) {
         receivers?.forEach { it.dispose() }
     }
 
