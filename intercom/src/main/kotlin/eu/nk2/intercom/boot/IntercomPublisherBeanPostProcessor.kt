@@ -38,7 +38,7 @@ class IntercomPublisherBeanPostProcessor(
     private val intercomPublisherAwareBeans = hashMapOf<String, Class<*>>()
     private val intercomPublishers: MutableMap<Int, Pair<Any, Map<Int, Method>>> = ConcurrentHashMap()
 
-    private lateinit var receivers: List<Disposable>
+    private var receivers: List<Disposable>? = null
 
     private fun bootstrapResponseKafkaStream(publisherId: Int): Disposable =
         rabbitProperties.first
@@ -124,7 +124,7 @@ class IntercomPublisherBeanPostProcessor(
     }
 
     @EventListener fun dispose(event: ContextClosedEvent) {
-        receivers.forEach { it.dispose() }
+        receivers?.forEach { it.dispose() }
     }
 
     override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any =

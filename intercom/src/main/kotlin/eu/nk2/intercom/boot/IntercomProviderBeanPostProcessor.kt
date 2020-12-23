@@ -31,7 +31,7 @@ class IntercomProviderBeanPostProcessor(
 ): BeanPostProcessor {
     private val log = LoggerFactory.getLogger(IntercomProviderBeanPostProcessor::class.java)
 
-    private lateinit var channel: Mono<Channel>
+    private var channel: Mono<Channel>? = null
 
     @EventListener fun init(event: ContextRefreshedEvent) {
         channel = rabbitProperties.first.asyncMap { it.createChannel() }
@@ -39,11 +39,11 @@ class IntercomProviderBeanPostProcessor(
     }
 
     @EventListener fun dispose(event: ContextClosedEvent) {
-        channel.block()?.close()
+        channel?.block()?.close()
     }
 
     private fun makeIntercomRequest(id: String, method: Method, args: Array<Any>): Mono<Any?> =
-        channel.asyncMap {
+        (channel ?: error("Context was not initialized when making intercom request")).asyncMap {
             val queue = it.queueDeclare().queue
             val requestId = UUID.randomUUID().toString()
             val publisherId = id.hashCode()
