@@ -1,6 +1,5 @@
 package eu.nk2.intercom.boot
 
-import eu.nk2.intercom.IntercomStarterMode
 import org.reactivestreams.Publisher
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -15,3 +14,4 @@ val INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES = arrayOf("starter_mode", "sta
     .map { "$INTERCOM_PROPERTIES_PREFIX.$it" }
 
 const val INTERCOM_DEFAULT_RABBIT_QUEUE_PREFIX = "ic"
+const val INTERCOM_DEFAULT_TIMEOUT = 5000L

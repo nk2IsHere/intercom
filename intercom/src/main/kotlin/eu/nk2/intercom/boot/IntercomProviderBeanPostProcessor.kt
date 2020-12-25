@@ -27,10 +27,11 @@ import reactor.rabbitmq.SenderOptions
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
+import java.time.Duration
 import java.util.*
 
 class IntercomProviderBeanPostProcessor(
-    private val rabbitProperties: Pair<Mono<Connection>, String>,
+    private val intercomProcessorProperties: IntercomProcessorProperties,
     private val intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
     private val intercomReturnBundleSerializer: IntercomReturnBundleSerializer
 ): BeanPostProcessor {
@@ -39,7 +40,7 @@ class IntercomProviderBeanPostProcessor(
     private var channel: Mono<Channel>? = null
 
     @Order(Ordered.HIGHEST_PRECEDENCE) @EventListener fun init(event: ContextRefreshedEvent) {
-        channel = rabbitProperties.first.asyncMap { it.createChannel() }
+        channel = intercomProcessorProperties.connection.asyncMap { it.createChannel() }
             .cache()
     }
 
@@ -54,7 +55,7 @@ class IntercomProviderBeanPostProcessor(
             val publisherId = id.hashCode()
             it.basicPublish(
                 "",
-                "${rabbitProperties.second}.$publisherId",
+                "${intercomProcessorProperties.queuePrefix}.$publisherId",
                 AMQP.BasicProperties.Builder()
                     .correlationId(requestId)
                     .replyTo(queue)
@@ -77,6 +78,7 @@ class IntercomProviderBeanPostProcessor(
                 )
             }
             .publishOn(Schedulers.elastic())
+            .timeout(Duration.ofMillis(intercomProcessorProperties.timeoutMillis))
         }.filter { (_, _, isRelated, _) -> isRelated }
             .asyncMap { (channel, tag, _, body) ->
                 channel.basicCancel(tag)

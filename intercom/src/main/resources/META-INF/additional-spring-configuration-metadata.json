@@ -11,6 +11,12 @@
       "type": "java.lang.String",
       "description": "Intercom rabbitmq server queue prefix.",
       "defaultValue": "ic"
+    },
+    {
+      "name": "intercom.timeoutMillis",
+      "type": "java.lang.Long",
+      "description": "Intercom rabbitmq server answer timeout.",
+      "defaultValue": 5000
     }
   ]
 }

@@ -38,15 +38,25 @@ class IntercomAutoConfiguration {
 
     @Bean
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
+    fun intercomProcessorProperties(
+        @Autowired properties: IntercomPropertiesConfiguration,
+        @Autowired @Qualifier(INTERCOM_RABBIT_CONNECTION_BEAN_ID) rabbitConnection: Mono<Connection>
+    ) = IntercomProcessorProperties(
+        connection = rabbitConnection,
+        queuePrefix = properties.rabbitQueuePrefix ?: INTERCOM_DEFAULT_RABBIT_QUEUE_PREFIX,
+        timeoutMillis = properties.timeoutMillis ?: INTERCOM_DEFAULT_TIMEOUT
+    )
+
+    @Bean
+    @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
     @Conditional(IntercomAutoConfigurationServerEnabledCondition::class)
     fun intercomPublisherBeanPostProcessor(
-        @Autowired properties: IntercomPropertiesConfiguration,
-        @Autowired @Qualifier(INTERCOM_RABBIT_CONNECTION_BEAN_ID) rabbitConnection: Mono<Connection>,
+        @Autowired intercomProcessorProperties: IntercomProcessorProperties,
         @Autowired intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
         @Autowired intercomReturnBundleSerializer: IntercomReturnBundleSerializer
     ): IntercomPublisherBeanPostProcessor =
         IntercomPublisherBeanPostProcessor(
-            rabbitProperties = rabbitConnection to (properties.rabbitQueuePrefix?: INTERCOM_DEFAULT_RABBIT_QUEUE_PREFIX),
+            intercomProcessorProperties = intercomProcessorProperties,
             intercomMethodBundleSerializer = intercomMethodBundleSerializer,
             intercomReturnBundleSerializer = intercomReturnBundleSerializer
         )
@@ -55,13 +65,12 @@ class IntercomAutoConfiguration {
     @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
     @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
     fun intercomProviderBeanPostProcessor(
-        @Autowired properties: IntercomPropertiesConfiguration,
-        @Autowired @Qualifier(INTERCOM_RABBIT_CONNECTION_BEAN_ID) rabbitConnection: Mono<Connection>,
+        @Autowired intercomProcessorProperties: IntercomProcessorProperties,
         @Autowired intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
         @Autowired intercomReturnBundleSerializer: IntercomReturnBundleSerializer
     ): IntercomProviderBeanPostProcessor =
         IntercomProviderBeanPostProcessor(
-            rabbitProperties = rabbitConnection to (properties.rabbitQueuePrefix?: INTERCOM_DEFAULT_RABBIT_QUEUE_PREFIX),
+            intercomProcessorProperties = intercomProcessorProperties,
             intercomMethodBundleSerializer = intercomMethodBundleSerializer,
             intercomReturnBundleSerializer = intercomReturnBundleSerializer
         )

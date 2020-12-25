@@ -34,7 +34,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 
 class IntercomPublisherBeanPostProcessor(
-    private val rabbitProperties: Pair<Mono<Connection>, String>,
+    private val intercomProcessorProperties: IntercomProcessorProperties,
     private val intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
     private val intercomReturnBundleSerializer: IntercomReturnBundleSerializer
 ): BeanPostProcessor, PriorityOrdered {
@@ -46,10 +46,10 @@ class IntercomPublisherBeanPostProcessor(
     private var receivers: List<Disposable>? = null
 
     private fun bootstrapResponseStream(publisherId: Int): Disposable =
-        RabbitFlux.createSender(SenderOptions().connectionMono(rabbitProperties.first))
+        RabbitFlux.createSender(SenderOptions().connectionMono(intercomProcessorProperties.connection))
             .send(
-                RabbitFlux.createReceiver(ReceiverOptions().connectionMono(rabbitProperties.first))
-                    .consumeAutoAck("${rabbitProperties.second}.$publisherId")
+                RabbitFlux.createReceiver(ReceiverOptions().connectionMono(intercomProcessorProperties.connection))
+                    .consumeAutoAck("${intercomProcessorProperties.queuePrefix}.$publisherId")
                     .map { delivery -> delivery.properties.replyTo then delivery.properties.correlationId then delivery.body }
                     .map { (replyKey, key, value) -> replyKey then key then Optional.ofNullable(intercomMethodBundleSerializer.deserialize(value)) }
                     .filter { (_, _, value) -> value.isPresent }
@@ -106,10 +106,10 @@ class IntercomPublisherBeanPostProcessor(
             .subscribe()
 
     @Order(Ordered.HIGHEST_PRECEDENCE) @EventListener fun init(event: ContextRefreshedEvent) {
-        rabbitProperties.first
+        intercomProcessorProperties.connection
             .doOnNext {
                 val channel = it.createChannel()
-                intercomPublishers.forEach { (publisherId, _) -> channel.queueDeclare("${rabbitProperties.second}.$publisherId", true, false, false, null) }
+                intercomPublishers.forEach { (publisherId, _) -> channel.queueDeclare("${intercomProcessorProperties.queuePrefix}.$publisherId", true, false, false, null) }
                 channel.close()
             }
             .block()

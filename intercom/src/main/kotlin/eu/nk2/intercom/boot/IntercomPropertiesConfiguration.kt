@@ -12,5 +12,6 @@ import org.springframework.stereotype.Component
 @ConfigurationProperties(prefix = INTERCOM_PROPERTIES_PREFIX)
 data class IntercomPropertiesConfiguration(
     val starterMode: IntercomStarterMode?,
-    val rabbitQueuePrefix: String?
+    val rabbitQueuePrefix: String?,
+    val timeoutMillis: Long?
 )

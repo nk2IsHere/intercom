@@ -4,6 +4,7 @@ import eu.nk2.intercom.api.ProvideIntercom
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import reactor.kotlin.core.publisher.toMono
+import java.util.concurrent.TimeoutException
 
 @SpringBootTest(classes = [IntercomApplication::class])
 class IntercomExceptionalTests {
@@ -54,13 +55,21 @@ class IntercomExceptionalTests {
 
     @Test
     fun testNoResultMono() {
-        testTimeoutExceptionalInterface.noResultMono()
-            .block()
+        assert(
+            testTimeoutExceptionalInterface.noResultMono()
+                .onErrorResume(TimeoutException::class.java) { "error".toMono() }
+                .onErrorReturn("anotherError")
+                .block() == "error"
+        ) { "Mono was not returning TimeoutException" }
     }
 
     @Test
     fun testNoResultFlux() {
-        testTimeoutExceptionalInterface.noResultFlux()
-            .blockFirst()
+        assert(
+            testTimeoutExceptionalInterface.noResultFlux()
+                .onErrorResume(TimeoutException::class.java) { "error".toMono() }
+                .onErrorReturn("anotherError")
+                .blockFirst() == "error"
+        ) { "Flux was not returning TimeoutException" }
     }
 }
