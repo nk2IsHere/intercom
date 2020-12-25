@@ -23,6 +23,10 @@ import reactor.core.Disposable
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
+import reactor.rabbitmq.OutboundMessage
+import reactor.rabbitmq.RabbitFlux
+import reactor.rabbitmq.ReceiverOptions
+import reactor.rabbitmq.SenderOptions
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.util.*
@@ -41,86 +45,76 @@ class IntercomPublisherBeanPostProcessor(
 
     private var receivers: List<Disposable>? = null
 
-    private fun bootstrapResponseKafkaStream(publisherId: Int): Disposable =
-        rabbitProperties.first
-            .asyncMap {
-                val channel = it.createChannel()
-                channel.queueDeclare("${rabbitProperties.second}:$publisherId", false, false, true, null)
-                channel.basicQos(1)
+    private fun bootstrapResponseStream(publisherId: Int): Disposable =
+        RabbitFlux.createSender(SenderOptions().connectionMono(rabbitProperties.first))
+            .send(
+                RabbitFlux.createReceiver(ReceiverOptions().connectionMono(rabbitProperties.first))
+                    .consumeAutoAck("${rabbitProperties.second}.$publisherId")
+                    .map { delivery -> delivery.properties.replyTo then delivery.properties.correlationId then delivery.body }
+                    .map { (replyKey, key, value) -> replyKey then key then Optional.ofNullable(intercomMethodBundleSerializer.deserialize(value)) }
+                    .filter { (_, _, value) -> value.isPresent }
+                    .map { (replyKey, key, value) -> replyKey then key then value.get() }
+                    .doOnNext { (_, _, value) -> log.debug("Received from intercom client ${value.publisherId}.${value.methodId}()") }
+                    .flatMap<NTuple3<String, String, IntercomReturnBundle<Any?>>> { (replyKey, key, value) ->
+                        run {
+                            val publisherDefinition = intercomPublishers[value.publisherId]
+                                ?: return@run Mono.error<Optional<Any>>(IntercomException(BadPublisherIntercomError))
 
-                channel
-            }
-            .flatMapMany { channel ->
-                Flux.create<NTuple2<Channel, Delivery>> { sink ->
-                    channel.basicConsume(
-                        "${rabbitProperties.second}:$publisherId",
-                        true,
-                        { _, delivery -> sink.next(channel then delivery) },
-                        { _ -> sink.complete() }
-                    )
-                }
-                .subscribeOn(Schedulers.boundedElastic())
-                .doOnCancel { channel.close() }
-            }
-            .publish()
-            .autoConnect(0)
-            .map { (channel, delivery) -> channel then delivery.properties.replyTo then delivery.properties.correlationId then delivery.body }
-            .map { (channel, replyKey, key, value) -> channel then replyKey then key then Optional.ofNullable(intercomMethodBundleSerializer.deserialize(value)) }
-            .filter { (_, _, _, value) -> value.isPresent }
-            .map { (channel, replyKey, key, value) -> channel then replyKey then key then value.get() }
-            .doOnNext { (_, _, _, value) -> log.debug("Received from intercom client ${value.publisherId}.${value.methodId}()") }
-            .flatMap<NTuple4<Channel, String, String, IntercomReturnBundle<Any?>>> { (channel, replyKey, key, value) ->
-                run {
-                    val publisherDefinition = intercomPublishers[value.publisherId]
-                        ?: return@run Mono.error<Optional<Any>>(IntercomException(BadPublisherIntercomError))
+                            val (publisher, method) = publisherDefinition.first to (publisherDefinition.second[value.methodId]
+                                ?: return@run Mono.error<Optional<Any>>(IntercomException(BadMethodIntercomError)))
 
-                    val (publisher, method) = publisherDefinition.first to (publisherDefinition.second[value.methodId]
-                        ?: return@run Mono.error<Optional<Any>>(IntercomException(BadMethodIntercomError)))
+                            if (method.parameterCount != value.parameters.size)
+                                return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError))
 
-                    if (method.parameterCount != value.parameters.size)
-                        return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError))
+                            for ((index, parameter) in method.parameters.withIndex())
+                                if (ClassUtils.objectiveClass(parameter.type) != ClassUtils.objectiveClass(value.parameters[index].javaClass))
+                                    return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError))
 
-                    for ((index, parameter) in method.parameters.withIndex())
-                        if (ClassUtils.objectiveClass(parameter.type) != ClassUtils.objectiveClass(value.parameters[index].javaClass))
-                            return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError))
-
-                    return@run try {
-                        when (method.returnType) {
-                            Mono::class.java -> (method.invoke(publisher, *value.parameters) as Mono<*>)
-                                .onErrorResume { Mono.error(IntercomException(ProviderIntercomError(it))) }
-                            Flux::class.java -> (method.invoke(publisher, *value.parameters) as Flux<*>)
-                                .onErrorResume { Mono.error(IntercomException(ProviderIntercomError(it))) }
-                                .collectList()
-                            else -> Mono.error<Any>(IntercomException(BadMethodReturnTypeIntercomError))
-                        }.wrapOptional()
-                    } catch (e: Exception) {
-                        log.debug("Error in handling intercom client", e)
-                        Mono.error<Optional<Any>>(IntercomException(when (e) {
-                            is IllegalArgumentException -> BadDataIntercomError
-                            is InvocationTargetException -> ProviderIntercomError(e)
-                            else -> InternalIntercomError(e)
-                        }))
+                            return@run try {
+                                when (method.returnType) {
+                                    Mono::class.java -> (method.invoke(publisher, *value.parameters) as Mono<*>)
+                                        .onErrorResume { Mono.error(IntercomException(ProviderIntercomError(it))) }
+                                    Flux::class.java -> (method.invoke(publisher, *value.parameters) as Flux<*>)
+                                        .onErrorResume { Mono.error(IntercomException(ProviderIntercomError(it))) }
+                                        .collectList()
+                                    else -> Mono.error<Any>(IntercomException(BadMethodReturnTypeIntercomError))
+                                }.wrapOptional()
+                            } catch (e: Exception) {
+                                log.debug("Error in handling intercom client", e)
+                                Mono.error<Optional<Any>>(IntercomException(when (e) {
+                                    is IllegalArgumentException -> BadDataIntercomError
+                                    is InvocationTargetException -> ProviderIntercomError(e)
+                                    else -> InternalIntercomError(e)
+                                }))
+                            }
+                        }.map<IntercomReturnBundle<Any?>> { IntercomReturnBundle(error = null, data = it.orNull()) }
+                            .onErrorResume(IntercomException::class.java) { Mono.just(IntercomReturnBundle<Any?>(error = it.error, data = null)) }
+                            .defaultIfEmpty(IntercomReturnBundle(error = NoDataIntercomError, data = null))
+                            .map { replyKey then key then it }
                     }
-                }.map<IntercomReturnBundle<Any?>> { IntercomReturnBundle(error = null, data = it.orNull()) }
-                    .onErrorResume(IntercomException::class.java) { Mono.just(IntercomReturnBundle<Any?>(error = it.error, data = null)) }
-                    .defaultIfEmpty(IntercomReturnBundle(error = NoDataIntercomError, data = null))
-                    .map { channel then replyKey then key then it }
-            }
-            .map { (channel, replyKey, key, value) -> channel then replyKey then key then intercomReturnBundleSerializer.serialize(value) }
-            .asyncMap { (channel, replyKey, key, value) ->
-                channel.basicPublish(
-                    "",
-                    replyKey,
-                    AMQP.BasicProperties.Builder()
-                        .correlationId(key)
-                        .build(),
-                    value
-                )
-            }
+                    .map { (replyKey, key, value) ->
+                        OutboundMessage(
+                            "",
+                            replyKey,
+                            AMQP.BasicProperties.Builder()
+                                .correlationId(key)
+                                .build(),
+                            intercomReturnBundleSerializer.serialize(value)
+                        )
+                    }
+            )
             .subscribe()
 
     @Order(Ordered.HIGHEST_PRECEDENCE) @EventListener fun init(event: ContextRefreshedEvent) {
-        receivers = intercomPublishers.map { (publisherId, _) -> bootstrapResponseKafkaStream(publisherId) }
+        rabbitProperties.first
+            .doOnNext {
+                val channel = it.createChannel()
+                intercomPublishers.forEach { (publisherId, _) -> channel.queueDeclare("${rabbitProperties.second}.$publisherId", true, false, false, null) }
+                channel.close()
+            }
+            .block()
+
+        receivers = intercomPublishers.map { (publisherId, _) -> bootstrapResponseStream(publisherId) }
             .toList()
     }
 

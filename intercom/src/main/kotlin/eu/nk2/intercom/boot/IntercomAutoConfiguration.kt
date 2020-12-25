@@ -7,7 +7,6 @@ import eu.nk2.intercom.DefaultIntercomReturnBundleSerializer
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
 import eu.nk2.intercom.IntercomStarterMode
-import org.springframework.amqp.core.AmqpAdmin
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.config.ConfigurableBeanFactory

@@ -11,6 +11,9 @@ class IntercomExceptionalTests {
     @ProvideIntercom(TEST_EXCEPTIONAL_INTERFACE_ID)
     private lateinit var testExceptionalInterface: TestExceptionalInterface
 
+    @ProvideIntercom(TEST_TIMEOUT_EXCEPTIONAL_INTERFACE_ID)
+    private lateinit var testTimeoutExceptionalInterface: TestTimeoutExceptionalInterface
+
     @Test
     fun testEmptyMono() {
         assert(
@@ -47,5 +50,17 @@ class IntercomExceptionalTests {
                 .onErrorReturn("anotherError")
                 .blockFirst() == "error"
         ) { "Flux was not returning IllegalStateException" }
+    }
+
+    @Test
+    fun testNoResultMono() {
+        testTimeoutExceptionalInterface.noResultMono()
+            .block()
+    }
+
+    @Test
+    fun testNoResultFlux() {
+        testTimeoutExceptionalInterface.noResultFlux()
+            .blockFirst()
     }
 }

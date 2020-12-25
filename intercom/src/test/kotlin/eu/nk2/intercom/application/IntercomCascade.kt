@@ -104,3 +104,8 @@ class TestExceptionalInterfaceImpl(
         Flux.error(IllegalStateException("Test exception"))
 
 }
+
+interface TestTimeoutExceptionalInterface {
+    fun noResultMono(): Mono<String>
+    fun noResultFlux(): Flux<String>
+}

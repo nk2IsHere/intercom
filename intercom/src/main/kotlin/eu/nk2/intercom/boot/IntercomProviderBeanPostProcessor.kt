@@ -21,6 +21,9 @@ import org.springframework.util.ReflectionUtils
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
+import reactor.rabbitmq.OutboundMessage
+import reactor.rabbitmq.RabbitFlux
+import reactor.rabbitmq.SenderOptions
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
@@ -51,7 +54,7 @@ class IntercomProviderBeanPostProcessor(
             val publisherId = id.hashCode()
             it.basicPublish(
                 "",
-                "${rabbitProperties.second}:$publisherId",
+                "${rabbitProperties.second}.$publisherId",
                 AMQP.BasicProperties.Builder()
                     .correlationId(requestId)
                     .replyTo(queue)
@@ -73,7 +76,7 @@ class IntercomProviderBeanPostProcessor(
                     { _ -> sink.complete() }
                 )
             }
-            .subscribeOn(Schedulers.boundedElastic())
+            .publishOn(Schedulers.elastic())
         }.filter { (_, _, isRelated, _) -> isRelated }
             .asyncMap { (channel, tag, _, body) ->
                 channel.basicCancel(tag)

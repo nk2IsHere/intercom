@@ -8,13 +8,13 @@ import java.util.*
 internal fun <T, R> Mono<T>.asyncMap(mapper: (T) -> R): Mono<R> =
     this.flatMap {
         Mono.fromCallable { mapper(it) }
-            .subscribeOn(Schedulers.boundedElastic())
+            .publishOn(Schedulers.elastic())
     }
 
 internal fun <T, R> Flux<T>.asyncMap(mapper: (T) -> R): Flux<R> =
     this.flatMap {
         Mono.fromCallable { mapper(it) }
-            .subscribeOn(Schedulers.boundedElastic())
+            .publishOn(Schedulers.elastic())
     }
 
 internal fun <T> Mono<T>.wrapOptional(): Mono<Optional<T>> =
