@@ -15,6 +15,8 @@ import org.springframework.boot.autoconfigure.amqp.RabbitProperties
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.*
+import org.springframework.core.Ordered
+import org.springframework.core.annotation.Order
 import reactor.core.publisher.Mono
 
 @Configuration
@@ -76,14 +78,16 @@ class IntercomAutoConfiguration {
         )
 
     @Bean
-    @ConditionalOnMissingBean(IntercomMethodBundleSerializer::class)
+    @Order(Ordered.LOWEST_PRECEDENCE)
+    @ConditionalOnMissingBean(type = ["IntercomMethodBundleSerializer"])
     fun intercomMethodBundleSerializer(
     ): IntercomMethodBundleSerializer =
         DefaultIntercomMethodBundleSerializer(
         )
 
     @Bean
-    @ConditionalOnMissingBean(IntercomReturnBundleSerializer::class)
+    @Order(Ordered.LOWEST_PRECEDENCE)
+    @ConditionalOnMissingBean(type = ["IntercomReturnBundleSerializer"])
     fun intercomReturnBundleSerializer(
     ): IntercomReturnBundleSerializer =
         DefaultIntercomReturnBundleSerializer(
