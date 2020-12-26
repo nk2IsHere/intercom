@@ -4,7 +4,6 @@ import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import org.springframework.stereotype.Component
 import org.springframework.util.SerializationUtils
 
-@Component
 class DefaultIntercomMethodBundleSerializer: IntercomMethodBundleSerializer {
 
     override fun serialize(methodBundle: IntercomMethodBundle): ByteArray =
