@@ -84,7 +84,7 @@ class IntercomProviderBeanPostProcessor(
                 channel.basicCancel(tag)
                 body
             }
-            .map { Optional.ofNullable(intercomReturnBundleSerializer.deserialize<Any>(it)) }
+            .map { Optional.ofNullable(intercomReturnBundleSerializer.deserialize(it)) }
             .filter { it.isPresent }
             .map { it.get() }
             .defaultIfEmpty(IntercomReturnBundle(error = ClientNoDataIntercomError, data = null))

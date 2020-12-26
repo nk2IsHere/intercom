@@ -55,7 +55,7 @@ class IntercomPublisherBeanPostProcessor(
                     .filter { (_, _, value) -> value.isPresent }
                     .map { (replyKey, key, value) -> replyKey then key then value.get() }
                     .doOnNext { (_, _, value) -> log.debug("Received from intercom client ${value.publisherId}.${value.methodId}()") }
-                    .flatMap<NTuple3<String, String, IntercomReturnBundle<Any?>>> { (replyKey, key, value) ->
+                    .flatMap<NTuple3<String, String, IntercomReturnBundle>> { (replyKey, key, value) ->
                         run {
                             val publisherDefinition = intercomPublishers[value.publisherId]
                                 ?: return@run Mono.error<Optional<Any>>(IntercomException(BadPublisherIntercomError))
@@ -87,8 +87,8 @@ class IntercomPublisherBeanPostProcessor(
                                     else -> InternalIntercomError(e)
                                 }))
                             }
-                        }.map<IntercomReturnBundle<Any?>> { IntercomReturnBundle(error = null, data = it.orNull()) }
-                            .onErrorResume(IntercomException::class.java) { Mono.just(IntercomReturnBundle<Any?>(error = it.error, data = null)) }
+                        }.map<IntercomReturnBundle> { IntercomReturnBundle(error = null, data = it.orNull()) }
+                            .onErrorResume(IntercomException::class.java) { Mono.just(IntercomReturnBundle(error = it.error, data = null)) }
                             .defaultIfEmpty(IntercomReturnBundle(error = NoDataIntercomError, data = null))
                             .map { replyKey then key then it }
                     }

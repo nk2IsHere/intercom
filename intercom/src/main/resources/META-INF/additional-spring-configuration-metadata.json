@@ -4,7 +4,7 @@
       "name": "intercom.starterMode",
       "type": "eu.nk2.intercom.IntercomStarterMode",
       "description": "Intercom mode.",
-      "defaultValue": "CLIENT_ONLY"
+      "defaultValue": "NONE"
     },
     {
       "name": "intercom.rabbitQueuePrefix",

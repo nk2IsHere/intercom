@@ -7,9 +7,9 @@ import org.springframework.util.SerializationUtils
 @Component
 class DefaultIntercomReturnBundleSerializer: IntercomReturnBundleSerializer {
 
-    override fun <T> serialize(returnBundle: IntercomReturnBundle<T>): ByteArray =
+    override fun serialize(returnBundle: IntercomReturnBundle): ByteArray =
         SerializationUtils.serialize(returnBundle)!!
 
-    override fun <T> deserialize(data: ByteArray): IntercomReturnBundle<T>? =
-        SerializationUtils.deserialize(data) as? IntercomReturnBundle<T>
+    override fun deserialize(data: ByteArray): IntercomReturnBundle? =
+        SerializationUtils.deserialize(data) as? IntercomReturnBundle
 }
