@@ -1,7 +1,9 @@
 package eu.nk2.intercom
 
+import eu.nk2.intercom.utils.NoArgsConstructor
 import java.io.Serializable
 
+@NoArgsConstructor
 data class IntercomMethodBundle(
     val publisherId: Int,
     val methodId: Int,
