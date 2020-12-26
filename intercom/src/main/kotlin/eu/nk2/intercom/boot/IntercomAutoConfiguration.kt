@@ -79,7 +79,7 @@ class IntercomAutoConfiguration {
 
     @Bean
     @Order(Ordered.LOWEST_PRECEDENCE)
-    @ConditionalOnMissingBean(type = ["IntercomMethodBundleSerializer"])
+    @ConditionalOnMissingBean(IntercomMethodBundleSerializer::class)
     fun intercomMethodBundleSerializer(
     ): IntercomMethodBundleSerializer =
         DefaultIntercomMethodBundleSerializer(
@@ -87,7 +87,7 @@ class IntercomAutoConfiguration {
 
     @Bean
     @Order(Ordered.LOWEST_PRECEDENCE)
-    @ConditionalOnMissingBean(type = ["IntercomReturnBundleSerializer"])
+    @ConditionalOnMissingBean(IntercomReturnBundleSerializer::class)
     fun intercomReturnBundleSerializer(
     ): IntercomReturnBundleSerializer =
         DefaultIntercomReturnBundleSerializer(
