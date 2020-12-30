@@ -16,8 +16,11 @@ object NoDataIntercomError: IntercomError("Server received no data")
 object BadDataIntercomError: IntercomError("Server received bad data")
 object BadPublisherIntercomError :IntercomError("Server received bad publisher - it cannot be found")
 object BadMethodIntercomError: IntercomError("Server received bad method - it cannot be found")
-object BadParamsIntercomError: IntercomError("Server received bad parameters - args count or types mismatch")
 object BadMethodReturnTypeIntercomError: IntercomError("Server has a bad method - it is not Publisher")
+class BadParamsIntercomError(should: Class<*>? = null, had: Class<*>? = null): IntercomError(
+    if(should != null && had != null) "Server received bad parameters - types mismatch (should: ${should.name}, had: ${had.name})"
+    else "Server received bad parameters - args count mismatch"
+)
 class ProviderIntercomError(throwable: Throwable): IntercomThrowableAwareError("Server produced provider error - check logs", throwable)
 class InternalIntercomError(throwable: Throwable): IntercomThrowableAwareError("Server received internal error - check logs and mentally punch the author of Intercom", throwable)
 

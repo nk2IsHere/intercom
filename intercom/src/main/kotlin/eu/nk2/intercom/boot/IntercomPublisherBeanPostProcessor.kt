@@ -64,11 +64,11 @@ class IntercomPublisherBeanPostProcessor(
                                 ?: return@run Mono.error<Optional<Any>>(IntercomException(BadMethodIntercomError)))
 
                             if (method.parameterCount != value.parameters.size)
-                                return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError))
+                                return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError()))
 
                             for ((index, parameter) in method.parameters.withIndex())
-                                if (ClassUtils.objectiveClass(parameter.type) != ClassUtils.objectiveClass(value.parameters[index].javaClass))
-                                    return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError))
+                                if (!ClassUtils.objectiveClass(parameter.type).isAssignableFrom(ClassUtils.objectiveClass(value.parameters[index].javaClass)))
+                                    return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError(parameter.type, value.parameters[index].javaClass)))
 
                             return@run try {
                                 when (method.returnType) {
