@@ -7,7 +7,7 @@ import java.io.Serializable
 data class IntercomMethodBundle(
     val publisherId: Int,
     val methodId: Int,
-    val parameters: Array<Any>
+    val parameters: Array<*>
 ): Serializable {
     companion object {
         private const val serialVersionUID = 20200720174649L

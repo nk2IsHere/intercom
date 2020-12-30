@@ -67,8 +67,9 @@ class IntercomPublisherBeanPostProcessor(
                                 return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError()))
 
                             for ((index, parameter) in method.parameters.withIndex())
-                                if (!ClassUtils.objectiveClass(parameter.type).isAssignableFrom(ClassUtils.objectiveClass(value.parameters[index].javaClass)))
-                                    return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError(parameter.type, value.parameters[index].javaClass)))
+                                if (!ClassUtils.objectiveClass(parameter.type).isAssignableFrom(ClassUtils.objectiveClass(value.parameters[index]?.javaClass))
+                                    && value.parameters[index] != null)
+                                    return@run Mono.error<Optional<Any>>(IntercomException(BadParamsIntercomError(parameter.type, value.parameters[index]?.javaClass)))
 
                             return@run try {
                                 when (method.returnType) {
