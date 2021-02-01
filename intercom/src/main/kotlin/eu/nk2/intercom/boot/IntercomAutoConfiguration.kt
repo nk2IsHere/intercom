@@ -23,6 +23,14 @@ import org.springframework.context.annotation.*
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
 import reactor.core.publisher.Mono
+import java.util.stream.Stream
+
+import org.springframework.core.type.AnnotatedTypeMetadata
+
+import org.springframework.context.annotation.ConditionContext
+
+
+
 
 @Configuration
 @Import(RabbitAutoConfiguration::class)
@@ -84,7 +92,8 @@ class IntercomAutoConfiguration {
 
     @Bean(INTERCOM_JACKSON_BEAN_ID)
     @Order(Ordered.LOWEST_PRECEDENCE)
-    @ConditionalOnMissingBean(ObjectMapper::class, name = [INTERCOM_JACKSON_BEAN_ID])
+    @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
+    @Conditional(IntercomObjectMapperBeanExistsCondition::class)
     fun intercomObjectMapper(
     ): ObjectMapper =
         jacksonObjectMapper()
@@ -138,3 +147,11 @@ internal class IntercomAutoConfigurationClientEnabledCondition: IntercomProperty
     { IntercomStarterMode.valueOf(it.toUpperCase()) },
     listOf(IntercomStarterMode.CLIENT_ONLY, IntercomStarterMode.CLIENT_SERVER)
 )
+
+internal class IntercomObjectMapperBeanExistsCondition: Condition {
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean =
+        context.beanFactory!!
+            .getBeanNamesForType(ObjectMapper::class.java)
+            .any { it == INTERCOM_JACKSON_BEAN_ID }
+            .not()
+}

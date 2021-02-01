@@ -23,10 +23,7 @@ import reactor.core.Disposable
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
-import reactor.rabbitmq.OutboundMessage
-import reactor.rabbitmq.RabbitFlux
-import reactor.rabbitmq.ReceiverOptions
-import reactor.rabbitmq.SenderOptions
+import reactor.rabbitmq.*
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.util.*
