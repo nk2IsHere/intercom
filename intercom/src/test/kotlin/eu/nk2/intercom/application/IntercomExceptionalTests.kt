@@ -48,6 +48,7 @@ class IntercomExceptionalTests {
         assert(
             testExceptionalInterface.errorResultFlux()
                 .onErrorResume(IllegalStateException::class.java) { "error".toMono() }
+                .doOnError { it.printStackTrace() }
                 .onErrorReturn("anotherError")
                 .blockFirst() == "error"
         ) { "Flux was not returning IllegalStateException" }

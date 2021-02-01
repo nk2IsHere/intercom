@@ -1,12 +1,17 @@
 package eu.nk2.intercom.boot
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator
+import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator
+import com.fasterxml.jackson.databind.module.SimpleModule
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.rabbitmq.client.Connection
 import com.rabbitmq.client.ConnectionFactory
-import eu.nk2.intercom.DefaultIntercomMethodBundleSerializer
-import eu.nk2.intercom.DefaultIntercomReturnBundleSerializer
+import eu.nk2.intercom.IntercomError
+import eu.nk2.intercom.IntercomStarterMode
 import eu.nk2.intercom.api.IntercomMethodBundleSerializer
 import eu.nk2.intercom.api.IntercomReturnBundleSerializer
-import eu.nk2.intercom.IntercomStarterMode
+import eu.nk2.intercom.serialization.*
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
@@ -77,20 +82,38 @@ class IntercomAutoConfiguration {
             intercomReturnBundleSerializer = intercomReturnBundleSerializer
         )
 
+    @Bean(INTERCOM_JACKSON_BEAN_ID)
+    @Order(Ordered.LOWEST_PRECEDENCE)
+    @ConditionalOnMissingBean(ObjectMapper::class, name = [INTERCOM_JACKSON_BEAN_ID])
+    fun intercomObjectMapper(
+    ): ObjectMapper =
+        jacksonObjectMapper()
+            .registerModule(
+                SimpleModule()
+                    .addSerializer(IntercomBundleEntry::class.java, IntercomBundleEntry.serializer)
+                    .addDeserializer(IntercomBundleEntry::class.java, IntercomBundleEntry.deserializer)
+                    .addSerializer(IntercomError::class.java, IntercomErrorSerializer)
+                    .addDeserializer(IntercomError::class.java, IntercomErrorDeserializer)
+            )
+
     @Bean
     @Order(Ordered.LOWEST_PRECEDENCE)
     @ConditionalOnMissingBean(IntercomMethodBundleSerializer::class)
     fun intercomMethodBundleSerializer(
+        @Autowired @Qualifier(INTERCOM_JACKSON_BEAN_ID) objectMapper: ObjectMapper
     ): IntercomMethodBundleSerializer =
         DefaultIntercomMethodBundleSerializer(
+            objectMapper = objectMapper
         )
 
     @Bean
     @Order(Ordered.LOWEST_PRECEDENCE)
     @ConditionalOnMissingBean(IntercomReturnBundleSerializer::class)
     fun intercomReturnBundleSerializer(
+        @Autowired @Qualifier(INTERCOM_JACKSON_BEAN_ID) objectMapper: ObjectMapper
     ): IntercomReturnBundleSerializer =
         DefaultIntercomReturnBundleSerializer(
+            objectMapper = objectMapper
         )
 }
 

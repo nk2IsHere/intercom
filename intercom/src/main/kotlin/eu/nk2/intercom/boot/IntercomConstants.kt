@@ -5,6 +5,7 @@ import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
 const val INTERCOM_RABBIT_CONNECTION_BEAN_ID = "intercomRabbitConnection"
+const val INTERCOM_JACKSON_BEAN_ID = "intercomJackson"
 
 internal val INTERCOM_ALLOWED_GENERIC_METHOD_RETURN_TYPES = arrayOf(Mono::class.java, Flux::class.java, Publisher::class.java)
 

@@ -82,7 +82,7 @@ class IntercomPublisherBeanPostProcessor(
                                 }.wrapOptional()
                             } catch (e: Exception) {
                                 log.debug("Error in handling intercom client", e)
-                                Mono.error<Optional<Any>>(IntercomException(when (e) {
+                                Mono.error<Optional<Any>>(IntercomException(when(e) {
                                     is IllegalArgumentException -> BadDataIntercomError
                                     is InvocationTargetException -> ProviderIntercomError(e)
                                     else -> InternalIntercomError(e)
