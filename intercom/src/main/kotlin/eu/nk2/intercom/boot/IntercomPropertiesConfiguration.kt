@@ -29,7 +29,7 @@ data class IntercomClientPropertiesConfiguration(
     val sslSecurity: Boolean?,
     val allowWiretapping: Boolean?,
     val connectionTimeoutMillis: Int?,
-    val routes: List<IntercomClientRoutesEntryPropertiesConfiguration>
+    val routes: List<IntercomClientRoutesEntryPropertiesConfiguration>?
 )
 
 data class IntercomClientRoutesEntryPropertiesConfiguration(

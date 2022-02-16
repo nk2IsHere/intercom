@@ -89,7 +89,7 @@ class IntercomAutoConfiguration {
         DefaultIntercomProviderResolutionRegistry()
             .apply {
                 providers.forEach { useResolver(it) }
-                properties.routes.forEach { useEntry(it.id, it.uri, it.type) }
+                properties.routes?.forEach { useEntry(it.id, it.uri, it.type) }
             }
 
     @Bean(INTERCOM_TCP_SERVER_BEAN_ID)
@@ -186,16 +186,13 @@ class IntercomAutoConfiguration {
             providerStreamFactory = intercomProviderStreamFactory
         )
 
-//    TODO: Somehow register beans after properties but before autowire (is it even possible?)
 //    @Bean
 //    @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
 //    fun intercomProviderBeanDefinitionRegistryPostProcessor(
-//        @Lazy intercomProviderStreamFactory: IntercomProviderStreamFactory,
-//        @Lazy intercomProviderResolutionRegistry: IntercomProviderResolutionRegistry<*>
+//        @Lazy intercomProviderStreamFactory: IntercomProviderStreamFactory
 //    ): IntercomProviderBeanDefinitionRegistryPostProcessor =
 //        IntercomProviderBeanDefinitionRegistryPostProcessor(
-//            providerStreamFactory = intercomProviderStreamFactory,
-//            providerResolutionRegistry = intercomProviderResolutionRegistry
+//            providerStreamFactory = intercomProviderStreamFactory
 //        )
 
     @Bean(INTERCOM_JACKSON_BEAN_ID)

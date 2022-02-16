@@ -14,9 +14,11 @@ internal const val INTERCOM_PROPERTIES_PREFIX = "intercom"
 internal const val INTERCOM_CLIENT_PROPERTIES_PREFIX = "intercom.client"
 internal const val INTERCOM_SERVER_PROPERTIES_PREFIX = "intercom.server"
 
-val INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES = arrayOf("starter_mode", "starter-mode", "starterMode")
+internal val INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES = arrayOf("starter_mode", "starter-mode", "starterMode")
     .map { "$INTERCOM_PROPERTIES_PREFIX.$it" }
 
-const val INTERCOM_DEFAULT_SERVER_PORT = 5000
+internal const val INTERCOM_DEFAULT_SERVER_PORT = 5000
 
-const val INTERCOM_DEFAULT_CONNECTION_TIMEOUT = 5000
+internal const val INTERCOM_DEFAULT_CONNECTION_TIMEOUT = 5000
+
+internal const val INTERCOM_CLIENT_ROUTES_PROPERTIES_PREFIX = "intercom.client.routes"
