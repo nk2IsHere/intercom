@@ -17,6 +17,7 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.reflect.full.isSuperclassOf
 
 class IntercomPublisherBeanPostProcessor(
     private val publisherStreamFactory: IntercomPublisherStreamFactory
@@ -93,7 +94,9 @@ class IntercomPublisherBeanPostProcessor(
 
             val publisherId = annotation.id.hashCode()
 
-            val intercomClass = if(annotation.type != Unit::class) annotation.type.java else beanClass
+            val intercomClass =
+                if(annotation.type != Unit::class && annotation.type.isSuperclassOf(beanClass.kotlin)) annotation.type.java
+                else beanClass
 
             intercomPublishersToBeanMap[publisherId] = IntercomPublisherBeanMethodBundle(
                 publisherId = publisherId,
