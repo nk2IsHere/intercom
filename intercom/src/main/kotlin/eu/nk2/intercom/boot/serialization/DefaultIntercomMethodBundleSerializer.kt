@@ -1,4 +1,4 @@
-package eu.nk2.intercom.serialization
+package eu.nk2.intercom.boot.serialization
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import eu.nk2.intercom.IntercomMethodBundle
@@ -25,9 +25,11 @@ class DefaultIntercomMethodBundleSerializer(
             }
 
     override fun serialize(methodBundle: IntercomMethodBundle): ByteArray =
-        objectMapper.writeValueAsBytes(IntercomMethodSerializableBundle(
+        objectMapper.writeValueAsBytes(
+            IntercomMethodSerializableBundle(
             publisherId = methodBundle.publisherId,
             methodId = methodBundle.methodId,
             parameters = IntercomBundleEntry.collapseEntry(methodBundle.parameters)
-        ))
+        )
+        )
 }

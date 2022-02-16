@@ -1,4 +1,4 @@
-package eu.nk2.intercom.serialization
+package eu.nk2.intercom.boot.serialization
 
 import eu.nk2.intercom.*
 import eu.nk2.kjackson.jsonDeserializer

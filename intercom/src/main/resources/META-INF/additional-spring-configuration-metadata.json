@@ -7,16 +7,58 @@
       "defaultValue": "NONE"
     },
     {
-      "name": "intercom.rabbitQueuePrefix",
-      "type": "java.lang.String",
-      "description": "Intercom rabbitmq server queue prefix.",
-      "defaultValue": "ic"
+      "name": "intercom.server.port",
+      "type": "java.lang.Integer",
+      "description": "Intercom tcp socket port (applicable to client instances)."
     },
     {
-      "name": "intercom.timeoutMillis",
-      "type": "java.lang.Long",
-      "description": "Intercom rabbitmq server answer timeout.",
-      "defaultValue": 5000
+      "name": "intercom.server.sslSecurity",
+      "type": "java.lang.Boolean",
+      "description": "Enable SSL Security on server.",
+      "defaultValue": false
+    },
+    {
+      "name": "intercom.server.allowWiretapping",
+      "type": "java.lang.Boolean",
+      "description": "Enable netty wiretapping on server.",
+      "defaultValue": false
+    },
+    {
+      "name": "intercom.client.sslSecurity",
+      "type": "java.lang.Boolean",
+      "description": "Enable SSL Security on client.",
+      "defaultValue": false
+    },
+    {
+      "name": "intercom.client.allowWiretapping",
+      "type": "java.lang.Boolean",
+      "description": "Enable netty wiretapping on client.",
+      "defaultValue": false
+    },
+    {
+      "name": "intercom.client.connectionTimeoutMillis",
+      "type": "java.lang.Integer",
+      "description": "Intercom tcp socket connection timeout in millis (applicable to client instances)."
+    },
+    {
+      "name": "intercom.client.routes",
+      "type": "java.util.List",
+      "description": "Intercom route definitions (applicable to client instances)."
+    },
+    {
+      "name": "intercom.client.routes.id",
+      "type": "java.lang.String",
+      "description": "Intercom route definition id (applicable to client instances)."
+    },
+    {
+      "name": "intercom.client.routes.uri",
+      "type": "java.net.URI",
+      "description": "Intercom route definition id (applicable to client instances)."
+    },
+    {
+      "name": "intercom.client.routes.type",
+      "type": "java.lang.Class",
+      "description": "Intercom route definition type (applicable to client instances)."
     }
   ]
 }

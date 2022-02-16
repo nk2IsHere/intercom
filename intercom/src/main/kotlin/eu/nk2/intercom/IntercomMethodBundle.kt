@@ -9,6 +9,7 @@ data class IntercomMethodBundle(
     val methodId: Int,
     val parameters: Array<*>
 ): Serializable {
+
     companion object {
         private const val serialVersionUID = 20200720174649L
     }

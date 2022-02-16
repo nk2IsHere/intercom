@@ -4,8 +4,28 @@ logging:
 
 intercom:
   starter-mode: CLIENT_SERVER
-  timeout-millis: 5000
-  rabbit-queue-prefix: "ic-test-"
+  server:
+    port: 5000
+  client:
+    routes:
+      - id: TEST_INTERFACE_INTERCOM_ID
+        uri: ic://localhost:5000
+        type: eu.nk2.intercom.application.TestInterface
+      - id: TEST_SECOND_INTERFACE_INTERCOM_ID
+        uri: ic://localhost:5000
+        type: eu.nk2.intercom.application.TestInterface
+      - id: TEST_DELAYED_INTERFACE_INTERCOM_ID
+        uri: ic://localhost:5000
+        type: eu.nk2.intercom.application.TestDelayedInterface
+      - id: TEST_SECOND_DELAYED_INTERFACE_INTERCOM_ID
+        uri: ic://localhost:5000
+        type: eu.nk2.intercom.application.TestDelayedInterface
+      - id: TEST_EXCEPTIONAL_INTERFACE_ID
+        uri: ic://localhost:5000
+        type: eu.nk2.intercom.application.TestExceptionalInterface
+      - id: TEST_TIMEOUT_EXCEPTIONAL_INTERFACE_ID
+        uri: ic://localhost:5000
+        type: eu.nk2.intercom.application.TestTimeoutExceptionalInterface
 
 spring:
   rabbitmq:

@@ -26,3 +26,5 @@ class BadParamsIntercomError(val should: String?, val had: String?): IntercomErr
 class ProviderIntercomError(throwable: Throwable): IntercomThrowableAwareError("Server produced provider error - check logs", throwable)
 class InternalIntercomError(throwable: Throwable): IntercomThrowableAwareError("Server received internal error - check logs and mentally punch the author of Intercom", throwable)
 object ClientNoDataIntercomError: IntercomError("Client received no data")
+object UnreachableIntercomError: IntercomError("This error must be unreachable, if you see it blame nk2")
+class NoProviderResolutionEntry(val id: String): IntercomError("No provider resolved by id $id - check your routes configuration")

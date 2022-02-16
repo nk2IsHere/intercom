@@ -1,0 +1,5 @@
+package eu.nk2.intercom.boot.resolution
+
+import eu.nk2.intercom.api.IntercomProviderResolutionRegistry
+
+class DefaultIntercomProviderResolutionRegistry: IntercomProviderResolutionRegistry<DefaultIntercomProviderResolutionEntry>()

@@ -1,4 +1,4 @@
-package eu.nk2.intercom.serialization
+package eu.nk2.intercom.boot.serialization
 
 import eu.nk2.kjackson.*
 import java.util.concurrent.ConcurrentHashMap
@@ -21,9 +21,9 @@ data class IntercomBundleEntry(
         private val classCache = ConcurrentHashMap<String, Class<*>>()
 
         private fun <T> getClassByCache(className: String): Class<T> =
-            (classCache[className] as? Class<T>) ?: (Class.forName(className) as? Class<T>)
-                ?.apply { classCache[className] = this }
-            ?: error("can't cast $className to its type")
+            (classCache[className] as? Class<T>)
+                ?: (Class.forName(className) as? Class<T>)?.apply { classCache[className] = this }
+                ?: error("can't cast $className to its type")
 
         val serializer = jsonSerializer<IntercomBundleEntry> { src, context -> jsonObject(
             "entry" to context(src.entry),
@@ -51,18 +51,18 @@ data class IntercomBundleEntry(
             when(data) {
                 is Array<*> -> IntercomBundleEntry(
                     entry = data.map { collapseEntry(it) },
-                    clazz = List::class.java,
+                    clazz = data.javaClass,
                     type = IntercomBundleEntryType.ARRAY
                 )
                 is Iterable<*> -> IntercomBundleEntry(
                     entry = data.map { collapseEntry(it) },
-                    clazz = List::class.java,
+                    clazz = data.javaClass,
                     type = IntercomBundleEntryType.LIST
                 )
                 is Map<*, *> -> IntercomBundleEntry(
                     entry = data.map { (key, value) -> (key as String) to collapseEntry(value) }
                         .toMap(),
-                    clazz = Map::class.java,
+                    clazz = data.javaClass,
                     type = IntercomBundleEntryType.MAP
                 )
                 null -> IntercomBundleEntry(

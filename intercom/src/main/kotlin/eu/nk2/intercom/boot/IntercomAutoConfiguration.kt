@@ -1,98 +1,192 @@
 package eu.nk2.intercom.boot
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator
-import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator
 import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.rabbitmq.client.Connection
-import com.rabbitmq.client.ConnectionFactory
 import eu.nk2.intercom.IntercomError
 import eu.nk2.intercom.IntercomStarterMode
-import eu.nk2.intercom.api.IntercomMethodBundleSerializer
-import eu.nk2.intercom.api.IntercomReturnBundleSerializer
-import eu.nk2.intercom.serialization.*
-import org.springframework.beans.factory.annotation.Autowired
+import eu.nk2.intercom.api.*
+import eu.nk2.intercom.boot.resolution.DefaultIntercomProviderResolutionEntry
+import eu.nk2.intercom.boot.resolution.DefaultIntercomProviderResolutionRegistry
+import eu.nk2.intercom.boot.resolution.IntercomIcSchemeProviderResolver
+import eu.nk2.intercom.boot.serialization.*
+import eu.nk2.intercom.boot.stream.DefaultIntercomProviderStreamFactory
+import eu.nk2.intercom.boot.stream.DefaultIntercomPublisherStreamFactory
+import io.netty.channel.ChannelOption
+import io.netty.handler.ssl.SslContextBuilder
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory
+import io.netty.handler.ssl.util.SelfSignedCertificate
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
-import org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.*
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
-import reactor.core.publisher.Mono
-import java.util.stream.Stream
-
 import org.springframework.core.type.AnnotatedTypeMetadata
-
 import org.springframework.context.annotation.ConditionContext
+import reactor.netty.tcp.TcpClient
+import reactor.netty.tcp.TcpServer
 
 
+internal class IntercomAutoConfigurationEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
+    INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
+    { IntercomStarterMode.valueOf(it.toUpperCase()) },
+    listOf(
+        IntercomStarterMode.CLIENT_ONLY,
+        IntercomStarterMode.CLIENT_SERVER,
+        IntercomStarterMode.SERVER_ONLY
+    )
+)
+
+
+internal class IntercomAutoConfigurationServerEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
+    INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
+    { IntercomStarterMode.valueOf(it.toUpperCase()) },
+    listOf(IntercomStarterMode.SERVER_ONLY, IntercomStarterMode.CLIENT_SERVER)
+)
+
+
+internal class IntercomAutoConfigurationClientEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
+    INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
+    { IntercomStarterMode.valueOf(it.toUpperCase()) },
+    listOf(IntercomStarterMode.CLIENT_ONLY, IntercomStarterMode.CLIENT_SERVER)
+)
+
+
+internal class IntercomObjectMapperBeanExistsCondition: Condition {
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean =
+        context.beanFactory!!
+            .getBeanNamesForType(ObjectMapper::class.java)
+            .any { it == INTERCOM_JACKSON_BEAN_ID }
+            .not()
+}
 
 
 @Configuration
-@Import(RabbitAutoConfiguration::class)
-@EnableConfigurationProperties(IntercomPropertiesConfiguration::class)
+@EnableConfigurationProperties(
+    IntercomPropertiesConfiguration::class,
+    IntercomClientPropertiesConfiguration::class,
+    IntercomServerPropertiesConfiguration::class
+)
 @Conditional(IntercomAutoConfigurationEnabledCondition::class)
 class IntercomAutoConfiguration {
 
-    @Bean(INTERCOM_RABBIT_CONNECTION_BEAN_ID)
-    @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
-    fun intercomRabbitConnection(
-        @Autowired rabbitProperties: RabbitProperties
-    ): Mono<Connection> = Mono.fromCallable {
-        ConnectionFactory().apply {
-            host = rabbitProperties.determineHost()
-            port = rabbitProperties.determinePort()
-            username = rabbitProperties.determineUsername()
-            password = rabbitProperties.determinePassword()
-        }.newConnection()
-    }.cache()
+    @Bean
+    @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
+    fun intercomIcSchemeProviderResolver(): IntercomIcSchemeProviderResolver =
+        IntercomIcSchemeProviderResolver()
 
     @Bean
-    @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
-    fun intercomProcessorProperties(
-        @Autowired properties: IntercomPropertiesConfiguration,
-        @Autowired @Qualifier(INTERCOM_RABBIT_CONNECTION_BEAN_ID) rabbitConnection: Mono<Connection>
-    ) = IntercomProcessorProperties(
-        connection = rabbitConnection,
-        queuePrefix = properties.rabbitQueuePrefix ?: INTERCOM_DEFAULT_RABBIT_QUEUE_PREFIX,
-        timeoutMillis = properties.timeoutMillis ?: INTERCOM_DEFAULT_TIMEOUT
+    @ConditionalOnMissingBean(IntercomProviderResolutionRegistry::class)
+    @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
+    fun intercomProviderResolutionRegistry(
+        properties: IntercomClientPropertiesConfiguration,
+        providers: List<IntercomProviderResolver<DefaultIntercomProviderResolutionEntry>>
+    ): IntercomProviderResolutionRegistry<DefaultIntercomProviderResolutionEntry> =
+        DefaultIntercomProviderResolutionRegistry()
+            .apply {
+                providers.forEach { useResolver(it) }
+                properties.routes.forEach { useEntry(it.id, it.uri, it.type) }
+            }
+
+    @Bean(INTERCOM_TCP_SERVER_BEAN_ID)
+    @Conditional(IntercomAutoConfigurationServerEnabledCondition::class)
+    fun intercomTcpServer(
+        properties: IntercomServerPropertiesConfiguration
+    ): TcpServer =
+        TcpServer.create()
+            .option(ChannelOption.AUTO_CLOSE, true)
+            .port(properties.port ?: INTERCOM_DEFAULT_SERVER_PORT)
+            .wiretap(properties.allowWiretapping ?: false)
+            .let {
+                if(properties.sslSecurity == true)
+                    it.secure {
+                        with(SelfSignedCertificate()) {
+                            it.sslContext(
+                                SslContextBuilder
+                                    .forServer(
+                                        this.certificate(),
+                                        this.privateKey()
+                                    )
+                            )
+                        }
+                    }
+                else
+                    it
+            }
+
+    @Bean(INTERCOM_TCP_CLIENT_BEAN_ID)
+    @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
+    fun intercomTcpClient(
+        properties: IntercomClientPropertiesConfiguration
+    ): TcpClient =
+        TcpClient.create()
+            .option(ChannelOption.AUTO_CLOSE, true)
+            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, properties.connectionTimeoutMillis ?: INTERCOM_DEFAULT_CONNECTION_TIMEOUT)
+            .wiretap(properties.allowWiretapping ?: false)
+            .let {
+                if(properties.sslSecurity == true)
+                    it.secure {
+                        it.sslContext(
+                            SslContextBuilder
+                                .forClient()
+                                .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                        )
+                    }
+                else
+                    it
+            }
+
+    @Bean
+    @ConditionalOnMissingBean(IntercomPublisherStreamFactory::class)
+    @Conditional(IntercomAutoConfigurationServerEnabledCondition::class)
+    fun intercomPublisherStreamFactory(
+        @Qualifier(INTERCOM_TCP_SERVER_BEAN_ID) tcpServer: TcpServer,
+        intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
+        intercomReturnBundleSerializer: IntercomReturnBundleSerializer
+    ): IntercomPublisherStreamFactory = DefaultIntercomPublisherStreamFactory(
+        tcpServer = tcpServer,
+        methodBundleSerializer = intercomMethodBundleSerializer,
+        returnBundleSerializer = intercomReturnBundleSerializer
     )
 
     @Bean
-    @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
+    @ConditionalOnMissingBean(IntercomProviderStreamFactory::class)
+    @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
+    fun intercomProviderStreamFactory(
+        @Qualifier(INTERCOM_TCP_CLIENT_BEAN_ID) tcpClient: TcpClient,
+        intercomProviderResolutionRegistry: IntercomProviderResolutionRegistry<DefaultIntercomProviderResolutionEntry>,
+        intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
+        intercomReturnBundleSerializer: IntercomReturnBundleSerializer
+    ): IntercomProviderStreamFactory = DefaultIntercomProviderStreamFactory(
+        tcpClient = tcpClient,
+        providerResolutionRegistry = intercomProviderResolutionRegistry,
+        methodBundleSerializer = intercomMethodBundleSerializer,
+        returnBundleSerializer = intercomReturnBundleSerializer
+    )
+
+    @Bean
     @Conditional(IntercomAutoConfigurationServerEnabledCondition::class)
     fun intercomPublisherBeanPostProcessor(
-        @Autowired intercomProcessorProperties: IntercomProcessorProperties,
-        @Autowired intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
-        @Autowired intercomReturnBundleSerializer: IntercomReturnBundleSerializer
+        intercomPublisherStreamFactory: IntercomPublisherStreamFactory
     ): IntercomPublisherBeanPostProcessor =
         IntercomPublisherBeanPostProcessor(
-            intercomProcessorProperties = intercomProcessorProperties,
-            intercomMethodBundleSerializer = intercomMethodBundleSerializer,
-            intercomReturnBundleSerializer = intercomReturnBundleSerializer
+            publisherStreamFactory = intercomPublisherStreamFactory
         )
 
     @Bean
-    @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
     @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
     fun intercomProviderBeanPostProcessor(
-        @Autowired intercomProcessorProperties: IntercomProcessorProperties,
-        @Autowired intercomMethodBundleSerializer: IntercomMethodBundleSerializer,
-        @Autowired intercomReturnBundleSerializer: IntercomReturnBundleSerializer
+        intercomProviderStreamFactory: IntercomProviderStreamFactory
     ): IntercomProviderBeanPostProcessor =
         IntercomProviderBeanPostProcessor(
-            intercomProcessorProperties = intercomProcessorProperties,
-            intercomMethodBundleSerializer = intercomMethodBundleSerializer,
-            intercomReturnBundleSerializer = intercomReturnBundleSerializer
+            providerStreamFactory = intercomProviderStreamFactory
         )
 
     @Bean(INTERCOM_JACKSON_BEAN_ID)
     @Order(Ordered.LOWEST_PRECEDENCE)
-    @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
     @Conditional(IntercomObjectMapperBeanExistsCondition::class)
     fun intercomObjectMapper(
     ): ObjectMapper =
@@ -109,7 +203,7 @@ class IntercomAutoConfiguration {
     @Order(Ordered.LOWEST_PRECEDENCE)
     @ConditionalOnMissingBean(IntercomMethodBundleSerializer::class)
     fun intercomMethodBundleSerializer(
-        @Autowired @Qualifier(INTERCOM_JACKSON_BEAN_ID) objectMapper: ObjectMapper
+        @Qualifier(INTERCOM_JACKSON_BEAN_ID) objectMapper: ObjectMapper
     ): IntercomMethodBundleSerializer =
         DefaultIntercomMethodBundleSerializer(
             objectMapper = objectMapper
@@ -119,39 +213,9 @@ class IntercomAutoConfiguration {
     @Order(Ordered.LOWEST_PRECEDENCE)
     @ConditionalOnMissingBean(IntercomReturnBundleSerializer::class)
     fun intercomReturnBundleSerializer(
-        @Autowired @Qualifier(INTERCOM_JACKSON_BEAN_ID) objectMapper: ObjectMapper
+        @Qualifier(INTERCOM_JACKSON_BEAN_ID) objectMapper: ObjectMapper
     ): IntercomReturnBundleSerializer =
         DefaultIntercomReturnBundleSerializer(
             objectMapper = objectMapper
         )
-}
-
-internal class IntercomAutoConfigurationEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
-    INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
-    { IntercomStarterMode.valueOf(it.toUpperCase()) },
-    listOf(
-        IntercomStarterMode.CLIENT_ONLY,
-        IntercomStarterMode.CLIENT_SERVER,
-        IntercomStarterMode.SERVER_ONLY
-    )
-)
-
-internal class IntercomAutoConfigurationServerEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
-    INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
-    { IntercomStarterMode.valueOf(it.toUpperCase()) },
-    listOf(IntercomStarterMode.SERVER_ONLY, IntercomStarterMode.CLIENT_SERVER)
-)
-
-internal class IntercomAutoConfigurationClientEnabledCondition: IntercomPropertyCondition<IntercomStarterMode?>(
-    INTERCOM_STARTER_MODE_ACCEPTED_PROPERTY_NAMES,
-    { IntercomStarterMode.valueOf(it.toUpperCase()) },
-    listOf(IntercomStarterMode.CLIENT_ONLY, IntercomStarterMode.CLIENT_SERVER)
-)
-
-internal class IntercomObjectMapperBeanExistsCondition: Condition {
-    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean =
-        context.beanFactory!!
-            .getBeanNamesForType(ObjectMapper::class.java)
-            .any { it == INTERCOM_JACKSON_BEAN_ID }
-            .not()
 }
