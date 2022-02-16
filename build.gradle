@@ -68,15 +68,15 @@ configure(buildProjects()) {
     compileKotlin {
         kotlinOptions {
             freeCompilerArgs = ['-Xjsr305=strict']
-            jvmTarget = '1.8'
-            languageVersion = "1.3"
+            jvmTarget = '11'
+            languageVersion = "1.6"
         }
     }
 
     compileTestKotlin {
         kotlinOptions {
             freeCompilerArgs = ['-Xjsr305=strict']
-            jvmTarget = '1.8'
+            jvmTarget = '11'
         }
     }
 }

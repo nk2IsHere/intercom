@@ -9,7 +9,7 @@ dependencies {
 
 	implementation 'org.springframework.boot:spring-boot-starter'
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-	implementation 'org.springframework.boot:spring-boot-starter-reactor-netty'
+	implementation 'io.projectreactor.netty:reactor-netty-http'
 
 	implementation 'eu.nk2:kjackson:v0.2.5'
 
