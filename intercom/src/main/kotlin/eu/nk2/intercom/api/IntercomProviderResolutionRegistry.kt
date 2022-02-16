@@ -10,6 +10,10 @@ open class IntercomProviderResolutionRegistry<T: IntercomProviderResolutionEntry
     fun get(id: String): T? =
         mutableEntryRegistry[id]
 
+    fun get(): Set<T> =
+        mutableEntryRegistry.values
+            .toSet()
+
     fun useResolver(resolver: IntercomProviderResolver<T>) {
         mutableResolverRegistry.add(resolver)
     }

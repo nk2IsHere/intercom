@@ -18,6 +18,7 @@ import io.netty.handler.ssl.util.InsecureTrustManagerFactory
 import io.netty.handler.ssl.util.SelfSignedCertificate
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
+import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -184,6 +185,18 @@ class IntercomAutoConfiguration {
         IntercomProviderBeanPostProcessor(
             providerStreamFactory = intercomProviderStreamFactory
         )
+
+//    TODO: Somehow register beans after properties but before autowire (is it even possible?)
+//    @Bean
+//    @Conditional(IntercomAutoConfigurationClientEnabledCondition::class)
+//    fun intercomProviderBeanDefinitionRegistryPostProcessor(
+//        @Lazy intercomProviderStreamFactory: IntercomProviderStreamFactory,
+//        @Lazy intercomProviderResolutionRegistry: IntercomProviderResolutionRegistry<*>
+//    ): IntercomProviderBeanDefinitionRegistryPostProcessor =
+//        IntercomProviderBeanDefinitionRegistryPostProcessor(
+//            providerStreamFactory = intercomProviderStreamFactory,
+//            providerResolutionRegistry = intercomProviderResolutionRegistry
+//        )
 
     @Bean(INTERCOM_JACKSON_BEAN_ID)
     @Order(Ordered.LOWEST_PRECEDENCE)

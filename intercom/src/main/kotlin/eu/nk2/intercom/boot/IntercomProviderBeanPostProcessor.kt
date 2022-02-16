@@ -38,22 +38,28 @@ class IntercomProviderBeanPostProcessor(
             ?: error("id is required in annotation @ProvideIntercom")
 
         ReflectionUtils.makeAccessible(field)
-        field.set(bean, Proxy.newProxyInstance(bean.javaClass.classLoader, arrayOf(field.type)) { _, method, args ->
-            return@newProxyInstance providerStreamFactory
-                .buildRequest(
-                    publisherRegistryId = id,
-                    publisherId = id.hashCode(),
-                    methodId = method.name.hashCode() xor method.parameters.map { it.type.name }.hashCode(),
-                    args = args ?: arrayOf()
-                )
-                .let {
-                    when(method.returnType) {
-                        Mono::class.java -> it
-                        Flux::class.java -> it.flatMapMany { Flux.fromIterable(it as List<*>) }
-                        else -> error("Impossible situation: return type of intercomRequest is not Publisher")
+        field.set(
+            bean,
+            Proxy.newProxyInstance(
+                bean.javaClass.classLoader,
+                arrayOf(field.type)
+            ) { _, method, args ->
+                return@newProxyInstance providerStreamFactory
+                    .buildRequest(
+                        publisherRegistryId = id,
+                        publisherId = id.hashCode(),
+                        methodId = method.name.hashCode() xor method.parameters.map { it.type.name }.hashCode(),
+                        args = args ?: arrayOf()
+                    )
+                    .let {
+                        when(method.returnType) {
+                            Mono::class.java -> it
+                            Flux::class.java -> it.flatMapMany { Flux.fromIterable(it as List<*>) }
+                            else -> error("Impossible situation: return type of intercomRequest is not Publisher")
+                        }
                     }
-                }
-        })
+            }
+        )
     }
 
     override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any =
