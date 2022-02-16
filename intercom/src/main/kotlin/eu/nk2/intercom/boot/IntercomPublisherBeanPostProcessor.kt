@@ -88,15 +88,17 @@ class IntercomPublisherBeanPostProcessor(
 
     override fun postProcessAfterInitialization(bean: Any, beanName: String): Any? {
         intercomPublisherAwareBeans[beanName]?.let { beanClass ->
-            val id = AnnotationUtils.getAnnotation(beanClass, PublishIntercom::class.java)?.id
-                ?: error("id is required in annotation @PublishIntercom")
+            val annotation = AnnotationUtils.getAnnotation(beanClass, PublishIntercom::class.java)
+                ?: error("Annotation @PublishIntercom is required on class $beanClass")
 
-            val publisherId = id.hashCode()
+            val publisherId = annotation.id.hashCode()
+
+            val intercomClass = if(annotation.type != Unit::class) annotation.type.java else beanClass
 
             intercomPublishersToBeanMap[publisherId] = IntercomPublisherBeanMethodBundle(
                 publisherId = publisherId,
                 bean = bean,
-                methodIdToMethodMap = beanClass.methods
+                methodIdToMethodMap = intercomClass.methods
                     .asSequence()
                     .filter { method ->
                         INTERCOM_ALLOWED_GENERIC_METHOD_RETURN_TYPES
@@ -118,7 +120,7 @@ class IntercomPublisherBeanPostProcessor(
                     ?: setOf()
             ))
 
-            log.debug("Mapped publisher $id to registry")
+            log.debug("Mapped publisher ${annotation.id} to registry")
         }
 
         return super.postProcessAfterInitialization(bean, beanName)
