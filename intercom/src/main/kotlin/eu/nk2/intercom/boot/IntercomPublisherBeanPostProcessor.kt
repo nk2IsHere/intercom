@@ -123,7 +123,7 @@ class IntercomPublisherBeanPostProcessor(
                     ?: setOf()
             ))
 
-            log.debug("Mapped publisher ${annotation.id} to registry")
+            log.info("Mapped publisher ${annotation.id} to registry")
         }
 
         return super.postProcessAfterInitialization(bean, beanName)

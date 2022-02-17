@@ -21,7 +21,7 @@ class DefaultIntercomPublisherStreamFactory(
 
     private val log = LoggerFactory.getLogger(DefaultIntercomPublisherStreamFactory::class.java)
 
-    private lateinit var tcpServerDisposable: DisposableServer
+    private var tcpServerDisposable: DisposableServer? = null
 
     override fun initializeStream(
         publishers: Set<IntercomPublisher>,
@@ -49,6 +49,6 @@ class DefaultIntercomPublisherStreamFactory(
     }
 
     override fun disposeStream() {
-        tcpServerDisposable.disposeNow()
+        tcpServerDisposable?.disposeNow()
     }
 }

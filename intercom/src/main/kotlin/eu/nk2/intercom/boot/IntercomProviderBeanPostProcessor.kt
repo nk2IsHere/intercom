@@ -33,7 +33,7 @@ class IntercomProviderBeanPostProcessor(
     }
 
     private fun mapProviderField(bean: Any, beanName: String, field: Field) {
-        log.debug("Mapping $beanName's provider field ${field.name} to proxy")
+        log.info("Mapped $beanName's provider field ${field.name} to proxy")
         val id = field.getAnnotation(ProvideIntercom::class.java)?.id
             ?: error("id is required in annotation @ProvideIntercom")
 
